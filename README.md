@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BudgetFlow
 
-## Getting Started
+A Copilot / Monarch-style personal budgeting app built with Next.js 14, Tailwind CSS, Recharts, and Plaid.
 
-First, run the development server:
+## Features
+
+- **Dashboard** — net worth hero + history chart, account list with institution logos, spending-by-category donut, this-month income/spend/net, recent transactions
+- **Transactions** — searchable, category-filterable feed grouped by day, with retailer logos
+- **Budgets** — monthly category budgets with progress bars, pace marker, and over-budget warnings
+- **Recurring** — automatic detection of subscriptions & bills (Netflix, rent, utilities…) with next-charge dates and an upcoming strip
+- **Cash Flow** — income vs. spending by month, savings rate, monthly table
+- **Merchant logos** — three-tier fallback: Plaid enrichment logo → Clearbit logo lookup by domain → colored initial avatar
+
+## Quick start
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000 — the app boots in **demo mode** with six months of realistic generated data, so every screen works with zero setup.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Connecting Plaid (sandbox)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Create a free account at https://dashboard.plaid.com and copy your `client_id` and **sandbox** secret (Team Settings → Keys).
+2. Copy `.env.example` to `.env.local` and fill in the keys:
+   ```
+   PLAID_CLIENT_ID=your_client_id
+   PLAID_SECRET=your_sandbox_secret
+   PLAID_ENV=sandbox
+   ```
+3. Restart `npm run dev`, go to **Settings**, and click **Connect a bank with Plaid**.
+4. In the sandbox Link flow, choose any bank and sign in with `user_good` / `pass_good`.
 
-## Learn More
+Once an account is linked, `/api/data` switches from demo data to live Plaid data (accounts + transactions with enriched merchant names, categories, and logos). To move to real banks later, switch `PLAID_ENV` to `development`/`production` with the matching secret.
 
-To learn more about Next.js, take a look at the following resources:
+Linked access tokens are stored in `.plaid-store.json` (dev-only convenience — swap for a real database before deploying anything).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deploying to Vercel (free) + weekly email digest
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Push the project to a GitHub repo, then import it at https://vercel.com/new (defaults are fine).
+2. In Vercel → Project → Settings → Environment Variables, add:
+   - `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`
+   - `PLAID_ACCESS_TOKEN` — Vercel has no persistent disk, so link your bank locally first, then copy the `accessToken` value out of `.plaid-store.json`
+   - `RESEND_API_KEY` — free key from https://resend.com/api-keys (or use `GMAIL_USER` + `GMAIL_APP_PASSWORD` for Gmail SMTP instead)
+   - `DIGEST_TO` — recipient address (required with Resend)
+   - `APP_PASSWORD` — password gate for the app (recommended: your finances are on a public URL)
+   - `CRON_SECRET` — any random string; protects the digest endpoint
+3. Deploy. `vercel.json` schedules **`/api/digest` every Sunday at 14:00 UTC** (~9am Central); Vercel Cron calls it with the `CRON_SECRET` automatically.
+4. Test without waiting for Sunday: open `https://your-app.vercel.app/api/digest?preview=1` (renders the email in the browser), or trigger a real send from Vercel's Cron tab.
 
-## Deploy on Vercel
+The digest includes: total spend vs. last week, income, net worth, category breakdown, five biggest purchases, and recurring charges due in the next 7 days.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Stack
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Next.js 14 (App Router) + TypeScript
+- Tailwind CSS (dark, Copilot-inspired theme)
+- Recharts for charts
+- Plaid Node SDK (`transactions/sync` + enrichment fields)

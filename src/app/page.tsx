@@ -1,101 +1,140 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useAppData } from "@/components/DataProvider";
+import MerchantLogo from "@/components/MerchantLogo";
+import TxRow from "@/components/TxRow";
+import { NetWorthLine, SpendingDonut } from "@/components/charts";
+import {
+  CATEGORY_COLORS,
+  fmtUSD,
+  fmtUSD0,
+  monthKey,
+  monthlyCashFlow,
+  netWorthSeries,
+  spendByCategory,
+} from "@/lib/analytics";
+import Link from "next/link";
+
+export default function Dashboard() {
+  const { data, loading } = useAppData();
+  if (loading || !data) return <Loading />;
+
+  const netWorth = data.accounts.reduce((s, a) => s + a.balance, 0);
+  const nwSeries = netWorthSeries(data.transactions, netWorth);
+  const thisMonth = monthKey(new Date().toISOString().slice(0, 10));
+  const catSpend = spendByCategory(data.transactions, thisMonth);
+  const totalSpend = catSpend.reduce((s, c) => s + c.total, 0);
+  const flow = monthlyCashFlow(data.transactions);
+  const cur = flow[flow.length - 1];
+  const recent = data.transactions.slice(0, 8);
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="space-y-6">
+      <header className="flex items-end justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-ink-muted mt-1">
+            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+          </p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        <div className="text-right">
+          <div className="text-xs text-ink-muted">Net worth</div>
+          <div className="text-2xl font-semibold tabular">{fmtUSD0(netWorth)}</div>
+        </div>
+      </header>
+
+      {/* Net worth + accounts */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="card p-5 lg:col-span-2">
+          <h2 className="text-sm font-medium text-ink-secondary mb-3">Net worth over time</h2>
+          <NetWorthLine data={nwSeries} />
+        </div>
+        <div className="card p-5">
+          <h2 className="text-sm font-medium text-ink-secondary mb-3">Accounts</h2>
+          <div className="space-y-3">
+            {data.accounts.map((a) => (
+              <div key={a.id} className="flex items-center gap-3">
+                <MerchantLogo name={a.institution} domain={a.institutionDomain} size={32} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium truncate">{a.name}</div>
+                  <div className="text-xs text-ink-muted">
+                    {a.institution} ••{a.mask}
+                  </div>
+                </div>
+                <div className={`text-sm tabular ${a.balance < 0 ? "text-serious" : "text-ink-primary"}`}>
+                  {fmtUSD(a.balance)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* This month */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="card p-5">
+          <h2 className="text-sm font-medium text-ink-secondary mb-1">Spending by category</h2>
+          <SpendingDonut data={catSpend} total={totalSpend} />
+          <div className="mt-2 space-y-1.5">
+            {catSpend.slice(0, 5).map((c) => (
+              <div key={c.category} className="flex items-center gap-2 text-sm">
+                <span className="w-2 h-2 rounded-full" style={{ background: CATEGORY_COLORS[c.category] }} />
+                <span className="text-ink-secondary flex-1">{c.category}</span>
+                <span className="tabular">{fmtUSD0(c.total)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card p-5 flex flex-col justify-between">
+          <h2 className="text-sm font-medium text-ink-secondary">This month</h2>
+          {cur && (
+            <div className="space-y-5 my-4">
+              <Stat label="Income" value={fmtUSD0(cur.income)} color="text-good" />
+              <Stat label="Spending" value={fmtUSD0(cur.spend)} color="text-ink-primary" />
+              <Stat
+                label="Net"
+                value={`${cur.net >= 0 ? "+" : ""}${fmtUSD0(cur.net)}`}
+                color={cur.net >= 0 ? "text-good" : "text-critical"}
+              />
+            </div>
+          )}
+          <Link href="/cashflow" className="text-sm text-series-1 hover:underline">
+            View cash flow →
+          </Link>
+        </div>
+
+        <div className="card p-3">
+          <div className="flex items-center justify-between px-2 pt-2 pb-1">
+            <h2 className="text-sm font-medium text-ink-secondary">Recent transactions</h2>
+            <Link href="/transactions" className="text-xs text-series-1 hover:underline">
+              See all
+            </Link>
+          </div>
+          <div>
+            {recent.map((t) => (
+              <TxRow key={t.id} tx={t} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div>
+      <div className="text-xs text-ink-muted">{label}</div>
+      <div className={`text-2xl font-semibold tabular ${color}`}>{value}</div>
+    </div>
+  );
+}
+
+function Loading() {
+  return (
+    <div className="flex items-center justify-center h-[60vh] text-ink-muted text-sm animate-pulse">
+      Loading your finances…
     </div>
   );
 }
