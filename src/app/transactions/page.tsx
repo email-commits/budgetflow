@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useAppData } from "@/components/DataProvider";
 import TxRow from "@/components/TxRow";
+import TxEditModal from "@/components/TxEditModal";
 import { fmtUSD0 } from "@/lib/analytics";
 import { Category, Transaction } from "@/lib/types";
 
@@ -23,18 +24,21 @@ const CATEGORIES: (Category | "All")[] = [
 ];
 
 export default function TransactionsPage() {
-  const { data, loading } = useAppData();
+  const { data, loading, refresh } = useAppData();
   const [query, setQuery] = useState("");
   const [cat, setCat] = useState<Category | "All">("All");
+  const [showHidden, setShowHidden] = useState(false);
+  const [editing, setEditing] = useState<Transaction | null>(null);
 
   const filtered = useMemo(() => {
     if (!data) return [];
     return data.transactions.filter((t) => {
+      if (!showHidden && t.hidden) return false;
       if (cat !== "All" && t.category !== cat) return false;
       if (query && !t.merchant.toLowerCase().includes(query.toLowerCase())) return false;
       return true;
     });
-  }, [data, query, cat]);
+  }, [data, query, cat, showHidden]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, Transaction[]>();
@@ -49,7 +53,8 @@ export default function TransactionsPage() {
     return <div className="text-ink-muted text-sm animate-pulse py-20 text-center">Loading…</div>;
   }
 
-  const totalOut = filtered.filter((t) => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+  const totalOut = filtered.filter((t) => t.amount < 0 && !t.hidden).reduce((s, t) => s + Math.abs(t.amount), 0);
+  const hiddenCount = data.transactions.filter((t) => t.hidden).length;
 
   return (
     <div className="space-y-5">
@@ -58,6 +63,7 @@ export default function TransactionsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Transactions</h1>
           <p className="text-sm text-ink-muted mt-1">
             {filtered.length.toLocaleString()} transactions · {fmtUSD0(totalOut)} out
+            {data.editable && " · click any transaction to edit"}
           </p>
         </div>
       </header>
@@ -84,6 +90,18 @@ export default function TransactionsPage() {
             </button>
           ))}
         </div>
+        {hiddenCount > 0 && (
+          <button
+            onClick={() => setShowHidden((s) => !s)}
+            className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${
+              showHidden
+                ? "border-white/40 text-ink-primary"
+                : "border-white/10 text-ink-muted hover:border-white/25"
+            }`}
+          >
+            {showHidden ? "Hiding hidden ✕" : `Show hidden (${hiddenCount})`}
+          </button>
+        )}
       </div>
 
       <div className="card p-2">
@@ -97,7 +115,7 @@ export default function TransactionsPage() {
               })}
             </div>
             {txs.map((t) => (
-              <TxRow key={t.id} tx={t} />
+              <TxRow key={t.id} tx={t} onClick={data.editable ? () => setEditing(t) : undefined} />
             ))}
           </div>
         ))}
@@ -105,6 +123,8 @@ export default function TransactionsPage() {
           <div className="py-16 text-center text-ink-muted text-sm">No transactions match.</div>
         )}
       </div>
+
+      {editing && <TxEditModal tx={editing} onClose={() => setEditing(null)} onSaved={refresh} />}
     </div>
   );
 }

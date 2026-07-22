@@ -32,6 +32,7 @@ export function inMonth(t: Transaction, key: string): boolean {
 export function spendByCategory(txs: Transaction[], key: string): { category: Category; total: number }[] {
   const map = new Map<Category, number>();
   for (const t of txs) {
+    if (t.hidden) continue;
     if (!inMonth(t, key) || t.amount >= 0) continue;
     if (t.category === "Other" && t.merchant.toLowerCase().includes("transfer")) continue;
     map.set(t.category, (map.get(t.category) ?? 0) + Math.abs(t.amount));
@@ -45,6 +46,7 @@ export function spendByCategory(txs: Transaction[], key: string): { category: Ca
 export function monthlyCashFlow(txs: Transaction[]): { month: string; income: number; spend: number; net: number }[] {
   const map = new Map<string, { income: number; spend: number }>();
   for (const t of txs) {
+    if (t.hidden) continue;
     if (t.category === "Other" && t.merchant.toLowerCase().includes("transfer")) continue;
     const k = monthKey(t.date);
     const e = map.get(k) ?? { income: 0, spend: 0 };
@@ -80,7 +82,7 @@ const CADENCE_DAYS: [RecurringItem["cadence"], number, number][] = [
 export function detectRecurring(txs: Transaction[]): RecurringItem[] {
   const byMerchant = new Map<string, Transaction[]>();
   for (const t of txs) {
-    if (t.amount >= 0) continue;
+    if (t.hidden || t.amount >= 0) continue;
     if (!byMerchant.has(t.merchant)) byMerchant.set(t.merchant, []);
     byMerchant.get(t.merchant)!.push(t);
   }

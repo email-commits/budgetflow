@@ -27,10 +27,11 @@ const tooltipStyle = {
   color: "#fff",
 };
 
-export function NetWorthLine({ data }: { data: { month: string; value: number }[] }) {
+/** Generic value-over-time area line. `x` should be display-ready labels. */
+export function NetWorthLine({ points }: { points: { x: string; value: number }[] }) {
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <AreaChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+      <AreaChart data={points} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
         <defs>
           <linearGradient id="nw" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#3987e5" stopOpacity={0.35} />
@@ -39,25 +40,21 @@ export function NetWorthLine({ data }: { data: { month: string; value: number }[
         </defs>
         <CartesianGrid stroke="#2c2c2a" vertical={false} />
         <XAxis
-          dataKey="month"
-          tickFormatter={monthLabel}
+          dataKey="x"
           tick={{ fontSize: 12, fill: "#898781" }}
           axisLine={{ stroke: AXIS.stroke }}
           tickLine={false}
+          minTickGap={40}
         />
         <YAxis
           tickFormatter={(v) => `$${Math.round(v / 1000)}k`}
           tick={{ fontSize: 12, fill: "#898781" }}
           axisLine={false}
           tickLine={false}
-          width={44}
+          width={48}
           domain={["dataMin - 2000", "dataMax + 2000"]}
         />
-        <Tooltip
-          contentStyle={tooltipStyle}
-          labelFormatter={(l) => monthLabel(String(l))}
-          formatter={(v) => [fmtUSD0(Number(v)), "Net worth"]}
-        />
+        <Tooltip contentStyle={tooltipStyle} formatter={(v) => [fmtUSD0(Number(v)), "Net worth"]} />
         <Area
           type="monotone"
           dataKey="value"
@@ -71,6 +68,50 @@ export function NetWorthLine({ data }: { data: { month: string; value: number }[
     </ResponsiveContainer>
   );
 }
+
+const ALLOC_COLORS = ["#3987e5", "#199e70", "#c98500", "#9085e9", "#e66767", "#d55181", "#d95926", "#86b6ef"];
+
+/** Portfolio allocation donut — slices get fixed palette slots in given order. */
+export function AllocationDonut({
+  slices,
+  centerLabel,
+  centerValue,
+}: {
+  slices: { label: string; value: number }[];
+  centerLabel: string;
+  centerValue: string;
+}) {
+  return (
+    <div className="relative">
+      <ResponsiveContainer width="100%" height={220}>
+        <PieChart>
+          <Pie
+            data={slices}
+            dataKey="value"
+            nameKey="label"
+            innerRadius={70}
+            outerRadius={95}
+            paddingAngle={2}
+            stroke="#1a1a19"
+            strokeWidth={2}
+            isAnimationActive={false}
+          >
+            {slices.map((s, i) => (
+              <Cell key={s.label} fill={ALLOC_COLORS[i % ALLOC_COLORS.length]} />
+            ))}
+          </Pie>
+          <Tooltip contentStyle={tooltipStyle} formatter={(v, name) => [fmtUSD0(Number(v)), String(name)]} />
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <span className="text-xs text-ink-muted">{centerLabel}</span>
+        <span className="text-xl font-semibold tabular">{centerValue}</span>
+      </div>
+    </div>
+  );
+}
+
+export const ALLOCATION_COLORS = ALLOC_COLORS;
 
 export function CashFlowBars({
   data,

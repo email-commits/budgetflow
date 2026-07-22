@@ -8,8 +8,13 @@ const NAV = [
   { href: "/", label: "Dashboard", icon: "◧" },
   { href: "/transactions", label: "Transactions", icon: "⇄" },
   { href: "/budgets", label: "Budgets", icon: "◔" },
+  { href: "/goals", label: "Goals", icon: "◎" },
+  { href: "/bills", label: "Bills", icon: "☑" },
   { href: "/recurring", label: "Recurring", icon: "↻" },
   { href: "/cashflow", label: "Cash Flow", icon: "∿" },
+  { href: "/investments", label: "Investments", icon: "◈" },
+  { href: "/review", label: "Review", icon: "✦" },
+  { href: "/assistant", label: "Assistant", icon: "✳" },
   { href: "/settings", label: "Settings", icon: "⚙" },
 ];
 

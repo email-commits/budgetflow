@@ -9,18 +9,40 @@ import {
   fmtUSD,
   fmtUSD0,
   monthKey,
+  monthLabel,
   monthlyCashFlow,
   netWorthSeries,
   spendByCategory,
 } from "@/lib/analytics";
+import { totalNetWorth } from "@/lib/types";
+import { detectAnomalies } from "@/lib/anomalies";
+import { InitialAvatar } from "@/components/MerchantLogo";
 import Link from "next/link";
+
+const fmtDay = (d: string) =>
+  new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+const KIND_LABELS: Record<string, string> = {
+  property: "Property",
+  vehicle: "Vehicle",
+  cash: "Cash",
+  other: "Other asset",
+  liability: "Liability",
+};
 
 export default function Dashboard() {
   const { data, loading } = useAppData();
   if (loading || !data) return <Loading />;
 
-  const netWorth = data.accounts.reduce((s, a) => s + a.balance, 0);
-  const nwSeries = netWorthSeries(data.transactions, netWorth);
+  const netWorth = totalNetWorth(data);
+  // Real recorded snapshots when we have enough of them; estimated series otherwise
+  const history = data.netWorthHistory ?? [];
+  const useReal = history.length >= 2;
+  const nwPoints = useReal
+    ? history.map((p) => ({ x: fmtDay(p.date), value: p.total }))
+    : netWorthSeries(data.transactions, netWorth).map((p) => ({ x: monthLabel(p.month), value: p.value }));
+  const manualAssets = data.manualAssets ?? [];
+  const anomalies = detectAnomalies(data.transactions);
   const thisMonth = monthKey(new Date().toISOString().slice(0, 10));
   const catSpend = spendByCategory(data.transactions, thisMonth);
   const totalSpend = catSpend.reduce((s, c) => s + c.total, 0);
@@ -43,13 +65,33 @@ export default function Dashboard() {
         </div>
       </header>
 
+      {/* Alerts */}
+      {anomalies.length > 0 && (
+        <div className="card p-4 border-warning/30">
+          <div className="text-xs text-warning uppercase tracking-wide mb-2">
+            ⚠ {anomalies.length} thing{anomalies.length === 1 ? "" : "s"} worth a look
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5">
+            {anomalies.slice(0, 4).map((a, i) => (
+              <div key={i} className="text-sm">
+                <span className="font-medium">{a.title}</span>
+                <span className="text-ink-muted"> — {a.detail}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Net worth + accounts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="card p-5 lg:col-span-2">
-          <h2 className="text-sm font-medium text-ink-secondary mb-3">Net worth over time</h2>
-          <NetWorthLine data={nwSeries} />
+          <h2 className="text-sm font-medium text-ink-secondary mb-3">
+            Net worth over time{" "}
+            {!useReal && <span className="text-xs text-ink-muted font-normal">(estimated — real tracking builds daily)</span>}
+          </h2>
+          <NetWorthLine points={nwPoints} />
         </div>
-        <div className="card p-5">
+        <div className="card p-5 max-h-[300px] overflow-y-auto">
           <h2 className="text-sm font-medium text-ink-secondary mb-3">Accounts</h2>
           <div className="space-y-3">
             {data.accounts.map((a) => (
@@ -66,6 +108,21 @@ export default function Dashboard() {
                 </div>
               </div>
             ))}
+            {manualAssets.map((m) => {
+              const negative = m.kind === "liability";
+              return (
+                <div key={m.id} className="flex items-center gap-3">
+                  <InitialAvatar name={m.name} size={32} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium truncate">{m.name}</div>
+                    <div className="text-xs text-ink-muted">{KIND_LABELS[m.kind]}</div>
+                  </div>
+                  <div className={`text-sm tabular ${negative ? "text-serious" : "text-ink-primary"}`}>
+                    {fmtUSD(negative ? -Math.abs(m.value) : m.value)}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

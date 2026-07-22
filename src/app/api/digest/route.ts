@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 import { getAppData } from "@/lib/data";
 import { computeWeeklyDigest, renderDigestEmail } from "@/lib/digest";
+import { detectAnomalies } from "@/lib/anomalies";
+import { billAlerts, billStatus } from "@/lib/bills";
+import { dbConfigured, getDb } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -28,7 +31,16 @@ export async function GET(req: NextRequest) {
 
   const data = await getAppData();
   const digest = computeWeeklyDigest(data);
-  const { subject, html } = renderDigestEmail(digest);
+  const alerts = detectAnomalies(data.transactions, 7).map((a) => ({ title: a.title, detail: a.detail }));
+  if (dbConfigured()) {
+    try {
+      const bills = await getDb().bill.findMany({ where: { active: true } });
+      alerts.push(...billAlerts(bills.map((b) => billStatus(b, data.transactions))));
+    } catch {
+      /* bills table may not exist yet */
+    }
+  }
+  const { subject, html } = renderDigestEmail(digest, alerts);
 
   if (req.nextUrl.searchParams.get("preview")) {
     return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });

@@ -50,17 +50,18 @@ export function readStore(): Store {
   return { items: [] };
 }
 
-export function writeStore(store: Store) {
+/** Returns true if the store was persisted to disk (false on read-only filesystems like Vercel). */
+export function writeStore(store: Store): boolean {
   try {
     fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2));
+    return true;
   } catch (e) {
-    // Read-only filesystem (e.g. Vercel). Log the token so the user can move it
-    // into the PLAID_ACCESS_TOKEN env var instead.
     console.warn(
       "Could not persist Plaid store (read-only filesystem). " +
         "Set PLAID_ACCESS_TOKEN in your environment instead.",
       e instanceof Error ? e.message : e
     );
+    return false;
   }
 }
 

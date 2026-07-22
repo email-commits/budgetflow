@@ -51,6 +51,17 @@ Linked access tokens are stored in `.plaid-store.json` (dev-only convenience —
 
 The digest includes: total spend vs. last week, income, net worth, category breakdown, five biggest purchases, and recurring charges due in the next 7 days.
 
+## Database (Phase 0)
+
+With `DATABASE_URL` set (free Postgres from https://neon.tech), the app upgrades to:
+
+- **Persistent storage** — tokens, accounts, and transactions live in the DB (no more env-var token juggling on Vercel; linking a bank on the deployed site just works)
+- **Multiple banks** — link as many institutions as you want
+- **Fast incremental sync** — cursor-based `transactions/sync`; pages load from the DB instantly, Plaid is only consulted every 15 min (or via Settings → "Sync now")
+- **DB-backed budgets** — seeded with defaults, ready for in-app editing (Phase 1)
+
+Setup: create a Neon project → copy the connection string → add `DATABASE_URL` to `.env.local` and Vercel → run `npm run db:push` once locally (creates tables) → restart. Existing tokens in `.plaid-store.json` / `PLAID_ACCESS_TOKEN` are imported automatically on first run.
+
 ## Stack
 
 - Next.js 14 (App Router) + TypeScript

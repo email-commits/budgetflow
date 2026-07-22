@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// A linked bank connection (one per Plaid Link flow). Supports multiple banks.
+model PlaidItem {
+  id                String    @id // Plaid item_id
+  accessToken       String
+  institutionName   String?
+  institutionDomain String?
+  /// transactions/sync cursor — enables cheap incremental syncs
+  cursor            String?
+  lastSyncedAt      DateTime?
+  createdAt         DateTime  @default(now())
+  accounts          Account[]
+}
+
+model Account {
+  id                String        @id // Plaid account_id
+  itemId            String
+  item              PlaidItem     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  name              String
+  institution       String
+  institutionDomain String?
+  type              String // checking | savings | credit | investment | loan
+  mask              String
+  balance           Float
+  transactions      Transaction[]
+  holdings          Holding[]
+}
+
+model Transaction {
+  id             String  @id // Plaid transaction_id
+  accountId      String
+  account        Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  date           String // ISO yyyy-mm-dd
+  merchant       String
+  merchantDomain String?
+  logoUrl        String?
+  category       String
+  amount         Float // negative = money out
+  pending        Boolean @default(false)
+
+  // user edits (win over rules, which win over Plaid's values)
+  categoryOverride String?
+  merchantOverride String?
+  hidden           Boolean @default(false)
+
+  @@index([date])
+  @@index([accountId])
+}
+
+/// Auto-categorization rule: merchant name contains `match` (case-insensitive)
+/// -> apply setCategory and/or renameTo to matching transactions at read time.
+model Rule {
+  id          String   @id @default(cuid())
+  match       String
+  setCategory String?
+  renameTo    String?
+  /// "user" (created by hand) or "ai" (auto-categorization)
+  source      String   @default("user")
+  createdAt   DateTime @default(now())
+}
+
+model Budget {
+  category     String  @id
+  monthlyLimit Float
+  /// carry unspent budget into the next month (Monarch-style)
+  rollover     Boolean @default(false)
+}
+
+/// Investment holding (from Plaid investments product, best-effort per item)
+model Holding {
+  id        String   @id // accountId:securityId
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name      String
+  ticker    String?
+  type      String? // equity | etf | mutual fund | cash | fixed income | ...
+  quantity  Float
+  value     Float
+  costBasis Float?
+  updatedAt DateTime @updatedAt
+}
+
+/// User-entered assets & liabilities (home, vehicle, cash, private loans...)
+model ManualAsset {
+  id        String   @id @default(cuid())
+  name      String
+  kind      String // property | vehicle | cash | other | liability
+  value     Float // positive for assets; liabilities entered positive, counted negative
+  updatedAt DateTime @updatedAt
+}
+
+/// A bill the user SHOULD be paying — the monitor audits reality against it
+model Bill {
+  id             String   @id @default(cuid())
+  name           String
+  /// case-insensitive substring matched against transaction merchant names
+  match          String
+  expectedAmount Float
+  /// allowed deviation before flagging (fraction, e.g. 0.1 = 10%)
+  tolerance      Float    @default(0.1)
+  /// day of month the bill is due (1-31, clamped to month length)
+  dueDay         Int
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+}
+
+/// Savings or debt-payoff goal
+model Goal {
+  id             String   @id @default(cuid())
+  name           String
+  kind           String // "save" | "payoff"
+  targetAmount   Float // save: amount to reach; payoff: ignored (target is $0 owed)
+  targetDate     String? // ISO yyyy-mm-dd, optional
+  accountId      String? // linked account -> progress tracks its balance automatically
+  startAmount    Float // linked-account balance at creation (baseline for pace)
+  manualProgress Float    @default(0) // for unlinked save goals
+  createdAt      DateTime @default(now())
+}
+
+/// Daily net-worth snapshot recorded on sync
+model NetWorthSnapshot {
+  date        String @id // ISO yyyy-mm-dd
+  total       Float
+  cash        Float
+  investments Float
+  liabilities Float // negative sum of credit+loan balances
+  manual      Float
+}

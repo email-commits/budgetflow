@@ -1,4 +1,5 @@
 import { CATEGORY_COLORS, detectRecurring, fmtUSD } from "./analytics";
+import { MonthlyReview, monthTitle } from "./review";
 import { AppData, Category, Transaction } from "./types";
 
 export interface WeeklyDigest {
@@ -14,7 +15,7 @@ export interface WeeklyDigest {
 }
 
 function isTransfer(t: Transaction): boolean {
-  return t.merchant.toLowerCase().includes("transfer");
+  return t.hidden === true || t.merchant.toLowerCase().includes("transfer");
 }
 
 function iso(d: Date): string {
@@ -73,8 +74,135 @@ export function computeWeeklyDigest(data: AppData, runDate = new Date()): Weekly
 const fmtDay = (d: string) =>
   new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
+const GRADE_HEX: Record<string, string> = { A: "#0a7a0a", B: "#2a78d6", C: "#c98500", D: "#c22525" };
+
+/** Monthly Review email — the 1st-of-month edition. */
+export function renderMonthlyEmail(r: MonthlyReview): { subject: string; html: string } {
+  const title = monthTitle(r.monthKey);
+  const spendDelta = r.totalSpend - r.avgSpend;
+  const deltaLine =
+    r.avgSpend <= 0 || Math.abs(spendDelta) < 1
+      ? ""
+      : spendDelta <= 0
+        ? `<span style="color:#0a7a0a;">▼ ${fmtUSD(Math.abs(spendDelta), 0)} under your average month</span>`
+        : `<span style="color:#c22525;">▲ ${fmtUSD(spendDelta, 0)} over your average month</span>`;
+
+  const movers = [...r.categories]
+    .filter((c) => Math.abs(c.delta) > 1)
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, 5);
+  const moverRows = movers.length
+    ? movers
+        .map(
+          (c) => `
+      <tr>
+        <td style="padding:6px 0;font-size:14px;color:#111;">
+          <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${CATEGORY_COLORS[c.category]};margin-right:7px;"></span>${c.category}
+        </td>
+        <td style="padding:6px 0;font-size:14px;text-align:right;white-space:nowrap;color:${c.delta > 0 ? "#c22525" : "#0a7a0a"};">
+          ${c.delta > 0 ? "▲" : "▼"} ${fmtUSD(Math.abs(c.delta), 0)}
+        </td>
+        <td style="padding:6px 0 6px 12px;font-size:14px;color:#111;text-align:right;white-space:nowrap;">${fmtUSD(c.total, 0)}</td>
+      </tr>`
+        )
+        .join("")
+    : `<tr><td style="padding:6px 0;font-size:14px;color:#888;">Steady month — nothing moved much.</td></tr>`;
+
+  const merchantRows = r.topMerchants
+    .slice(0, 5)
+    .map(
+      (m) => `
+      <tr>
+        <td style="padding:6px 0;font-size:14px;color:#111;">${m.merchant}<span style="color:#888;font-size:12px;"> · ${m.count}×</span></td>
+        <td style="padding:6px 0;font-size:14px;color:#111;text-align:right;white-space:nowrap;">${fmtUSD(m.total, 0)}</td>
+      </tr>`
+    )
+    .join("");
+
+  const budgetLine =
+    r.budgets.length === 0
+      ? ""
+      : `<tr><td style="height:14px;"></td></tr>
+        <tr><td style="background:#ffffff;border-radius:14px;padding:24px;border:1px solid #e6e6e2;">
+          <div style="font-size:15px;font-weight:600;color:#111;margin-bottom:6px;">Budgets</div>
+          <div style="font-size:14px;color:#333;">${r.budgets.length - r.budgetsOver} of ${r.budgets.length} kept${
+            r.budgetsOver > 0
+              ? ` — over in ${r.budgets
+                  .filter((b) => b.over)
+                  .map((b) => b.category)
+                  .join(", ")}`
+              : " — clean sweep 🎉"
+          }</div>
+        </td></tr>`;
+
+  const subject = `Your ${title} review · ${fmtUSD(r.totalSpend, 0)} spent · grade ${r.grade}`;
+
+  const html = `<!doctype html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f4f4f2;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f2;padding:28px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+        <tr><td style="padding:0 4px 14px;">
+          <span style="display:inline-block;width:26px;height:26px;border-radius:8px;background:#2a78d6;color:#fff;text-align:center;line-height:26px;font-weight:700;font-size:14px;">B</span>
+          <span style="font-size:17px;font-weight:600;color:#111;vertical-align:middle;margin-left:8px;">BudgetFlow · Monthly Review</span>
+        </td></tr>
+
+        <tr><td style="background:#ffffff;border-radius:14px;padding:24px;border:1px solid #e6e6e2;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td>
+              <div style="font-size:13px;color:#888;">${title}</div>
+              <div style="font-size:34px;font-weight:700;color:#111;margin-top:4px;">${fmtUSD(r.totalSpend, 0)} <span style="font-size:15px;font-weight:400;color:#888;">spent</span></div>
+              <div style="font-size:13px;margin-top:6px;">${deltaLine}</div>
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:14px;"><tr>
+                <td style="padding-right:28px;">
+                  <div style="font-size:12px;color:#888;">Income</div>
+                  <div style="font-size:18px;font-weight:600;color:#0a7a0a;">${fmtUSD(r.totalIncome, 0)}</div>
+                </td>
+                <td>
+                  <div style="font-size:12px;color:#888;">Savings rate</div>
+                  <div style="font-size:18px;font-weight:600;color:${r.savingsRate >= 0 ? "#0a7a0a" : "#c22525"};">${Math.round(r.savingsRate * 100)}%</div>
+                </td>
+              </tr></table>
+            </td>
+            <td align="right" valign="top">
+              <div style="width:64px;height:64px;border-radius:50%;border:4px solid ${GRADE_HEX[r.grade]};color:${GRADE_HEX[r.grade]};font-size:32px;font-weight:700;text-align:center;line-height:60px;">${r.grade}</div>
+              <div style="font-size:11px;color:#888;text-align:center;margin-top:4px;">grade</div>
+            </td>
+          </tr></table>
+        </td></tr>
+
+        <tr><td style="height:14px;"></td></tr>
+        <tr><td style="background:#ffffff;border-radius:14px;padding:24px;border:1px solid #e6e6e2;">
+          <div style="font-size:15px;font-weight:600;color:#111;margin-bottom:6px;">Biggest movers vs. your average</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${moverRows}</table>
+        </td></tr>
+
+        <tr><td style="height:14px;"></td></tr>
+        <tr><td style="background:#ffffff;border-radius:14px;padding:24px;border:1px solid #e6e6e2;">
+          <div style="font-size:15px;font-weight:600;color:#111;margin-bottom:6px;">Top merchants</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${merchantRows}</table>
+        </td></tr>
+        ${budgetLine}
+
+        <tr><td style="padding:16px 4px;color:#999;font-size:12px;">
+          Sent on the 1st of each month by your BudgetFlow app.
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  return { subject, html };
+}
+
 /** Render the digest as a self-contained HTML email (inline styles, email-client-safe). */
-export function renderDigestEmail(d: WeeklyDigest): { subject: string; html: string } {
+export function renderDigestEmail(
+  d: WeeklyDigest,
+  anomalies: { title: string; detail: string }[] = []
+): { subject: string; html: string } {
   const delta = d.totalSpend - d.prevWeekSpend;
   const deltaPct = d.prevWeekSpend > 0 ? Math.round((delta / d.prevWeekSpend) * 100) : 0;
   const deltaLine =
@@ -176,6 +304,21 @@ export function renderDigestEmail(d: WeeklyDigest): { subject: string; html: str
           <div style="font-size:15px;font-weight:600;color:#111;margin-bottom:6px;">Coming up this week</div>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${upcomingRows}</table>
         </td></tr>
+        ${
+          anomalies.length
+            ? `<tr><td style="height:14px;"></td></tr>
+        <tr><td style="background:#fff8ec;border-radius:14px;padding:24px;border:1px solid #f0dcb4;">
+          <div style="font-size:15px;font-weight:600;color:#8a5b00;margin-bottom:8px;">⚠ Worth a look</div>
+          ${anomalies
+            .slice(0, 5)
+            .map(
+              (a) =>
+                `<div style="font-size:14px;color:#333;padding:4px 0;"><b>${a.title}</b> — ${a.detail}</div>`
+            )
+            .join("")}
+        </td></tr>`
+            : ""
+        }
 
         <tr><td style="padding:16px 4px;color:#999;font-size:12px;">
           Sent automatically every Sunday by your BudgetFlow app.
