@@ -8,6 +8,10 @@ export interface Bill {
   tolerance: number;
   dueDay: number;
   active: boolean;
+  /** exact amount the biller says is due this cycle (pulled from their site) */
+  statementAmount?: number | null;
+  statementDate?: string | null;
+  planInfo?: string | null;
 }
 
 export type BillState = "paid" | "overpaid" | "underpaid" | "upcoming" | "due-soon" | "missed";
@@ -24,6 +28,8 @@ export interface BillStatus {
   /** average of previous payments (before this cycle), for trend context */
   historicalAvg?: number;
   paymentsFound: number;
+  /** true when this cycle was verified against the biller's own statement amount */
+  statementVerified?: boolean;
 }
 
 const GRACE_DAYS = 3;
@@ -64,11 +70,20 @@ export function billStatus(bill: Bill, txs: Transaction[], now = new Date()): Bi
 
   const daysUntilDue = Math.round((dueDate.getTime() - now.getTime()) / msDay);
 
+  // If a statement from the biller applies to this cycle, verify against it
+  // exactly (±$1) instead of the tolerance band around the expected amount.
+  const statementApplies =
+    bill.statementAmount != null &&
+    bill.statementAmount > 0 &&
+    (!bill.statementDate ||
+      Math.abs(new Date(bill.statementDate + "T12:00:00Z").getTime() - dueDate.getTime()) / msDay <= 35);
+  const target = statementApplies ? bill.statementAmount! : bill.expectedAmount;
+  const tolAmt = statementApplies ? 1 : bill.expectedAmount * bill.tolerance;
+
   if (inWindow.length > 0) {
     const paidAmount = inWindow.reduce((s, t) => s + Math.abs(t.amount), 0);
     const latest = inWindow.reduce((a, b) => (a.date > b.date ? a : b));
-    const variance = paidAmount - bill.expectedAmount;
-    const tolAmt = bill.expectedAmount * bill.tolerance;
+    const variance = paidAmount - target;
     let state: BillState = "paid";
     if (variance > tolAmt && variance > 1) state = "overpaid";
     else if (variance < -tolAmt && Math.abs(variance) > 1) state = "underpaid";
@@ -82,6 +97,7 @@ export function billStatus(bill: Bill, txs: Transaction[], now = new Date()): Bi
       variance,
       historicalAvg,
       paymentsFound: inWindow.length,
+      statementVerified: statementApplies || undefined,
     };
   }
 
@@ -102,14 +118,16 @@ export function billAlerts(statuses: BillStatus[]): { title: string; detail: str
         detail: `Was due ${s.dueDate} (~${fmt(s.bill.expectedAmount)}) — no matching payment found`,
       });
     } else if (s.state === "overpaid") {
+      const ref = s.statementVerified ? `the biller's statement (${fmt(s.bill.statementAmount ?? 0)})` : `expected ${fmt(s.bill.expectedAmount)}`;
       alerts.push({
         title: `Overpaid: ${s.bill.name}`,
-        detail: `Paid ${fmt(s.paidAmount ?? 0)} vs expected ${fmt(s.bill.expectedAmount)} (+${fmt(s.variance ?? 0)})`,
+        detail: `Paid ${fmt(s.paidAmount ?? 0)} vs ${ref} (+${fmt(s.variance ?? 0)})`,
       });
     } else if (s.state === "underpaid") {
+      const ref = s.statementVerified ? `the biller's statement (${fmt(s.bill.statementAmount ?? 0)})` : `expected ${fmt(s.bill.expectedAmount)}`;
       alerts.push({
         title: `Underpaid: ${s.bill.name}`,
-        detail: `Paid ${fmt(s.paidAmount ?? 0)} vs expected ${fmt(s.bill.expectedAmount)} — partial payment?`,
+        detail: `Paid ${fmt(s.paidAmount ?? 0)} vs ${ref} — partial payment?`,
       });
     }
   }

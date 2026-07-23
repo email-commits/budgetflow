@@ -39,7 +39,7 @@ async function getAppDataFromDb(force: boolean): Promise<AppData> {
   const [accounts, transactions, itemCount, ruleRows, holdingRows, manualRows, snapshotRows, goalRows] =
     await Promise.all([
       db.account.findMany(),
-      db.transaction.findMany({ orderBy: { date: "desc" }, take: 5000 }),
+      db.transaction.findMany({ orderBy: { date: "desc" }, take: 25000 }),
       db.plaidItem.count(),
       db.rule.findMany({ orderBy: { createdAt: "asc" } }),
       db.holding.findMany({ include: { account: { select: { name: true } } } }),

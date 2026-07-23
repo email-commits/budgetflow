@@ -109,6 +109,11 @@ model Bill {
   /// day of month the bill is due (1-31, clamped to month length)
   dueDay         Int
   active         Boolean  @default(true)
+  /// latest statement pulled from the biller's own site (enables exact verification)
+  statementAmount Float?
+  statementDate   String? // due date the statement applies to (ISO)
+  /// plan/rate details captured from the biller (for better-options review)
+  planInfo        String?
   createdAt      DateTime @default(now())
 }
 

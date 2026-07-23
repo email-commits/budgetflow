@@ -95,7 +95,8 @@ async function syncItem(
     });
   }
 
-  // transactions via cursor
+  // transactions via cursor — batched writes (critical for the initial 2-year backfill)
+  const validAccountIds = new Set(acctResp.data.accounts.map((a) => a.account_id));
   let cursor = item.cursor ?? undefined;
   let hasMore = true;
   while (hasMore) {
@@ -104,32 +105,48 @@ async function syncItem(
       cursor,
       count: 500,
     });
-    for (const t of [...resp.data.added, ...resp.data.modified]) {
-      const m = mapPlaidTransaction(t);
-      await db.transaction.upsert({
-        where: { id: m.id },
-        update: {
-          date: m.date,
-          merchant: m.merchant,
-          merchantDomain: m.merchantDomain,
-          logoUrl: m.logoUrl,
-          category: m.category,
-          amount: m.amount,
-          pending: m.pending ?? false,
-        },
-        create: {
+
+    // new transactions: one bulk insert per page instead of one write per row
+    const added = resp.data.added
+      .filter((t) => validAccountIds.has(t.account_id))
+      .map((t) => {
+        const m = mapPlaidTransaction(t);
+        return {
           id: m.id,
           accountId: m.accountId,
           date: m.date,
           merchant: m.merchant,
-          merchantDomain: m.merchantDomain,
-          logoUrl: m.logoUrl,
+          merchantDomain: m.merchantDomain ?? null,
+          logoUrl: m.logoUrl ?? null,
           category: m.category,
           amount: m.amount,
           pending: m.pending ?? false,
-        },
+        };
       });
+    if (added.length > 0) {
+      await db.transaction.createMany({ data: added, skipDuplicates: true });
     }
+
+    // modified are rare — per-row updates are fine
+    for (const t of resp.data.modified) {
+      if (!validAccountIds.has(t.account_id)) continue;
+      const m = mapPlaidTransaction(t);
+      await db.transaction
+        .update({
+          where: { id: m.id },
+          data: {
+            date: m.date,
+            merchant: m.merchant,
+            merchantDomain: m.merchantDomain ?? null,
+            logoUrl: m.logoUrl ?? null,
+            category: m.category,
+            amount: m.amount,
+            pending: m.pending ?? false,
+          },
+        })
+        .catch(() => {}); // modified row we never inserted — ignore
+    }
+
     if (resp.data.removed.length > 0) {
       await db.transaction.deleteMany({
         where: { id: { in: resp.data.removed.map((r) => r.transaction_id!).filter(Boolean) } },

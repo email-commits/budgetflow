@@ -29,7 +29,14 @@ export async function POST() {
     });
     return NextResponse.json({ link_token: resp.data.link_token });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "link token error";
+    // Surface Plaid's real error, not axios's generic wrapper
+    const plaidErr = (e as { response?: { data?: { error_code?: string; error_message?: string } } })?.response?.data;
+    const msg = plaidErr?.error_message
+      ? `Plaid: ${plaidErr.error_message} (${plaidErr.error_code})`
+      : e instanceof Error
+        ? e.message
+        : "link token error";
+    console.error("create_link_token failed:", plaidErr ?? e);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

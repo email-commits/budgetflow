@@ -205,7 +205,19 @@ export default function BillsPage() {
                         ? `Was due ${s.dueDate} — no payment found`
                         : `Due ${s.dueDate} (${s.daysUntilDue}d)`}
                     {s.historicalAvg !== undefined && ` · avg ${fmtUSD0(s.historicalAvg)}`}
+                    {s.bill.statementAmount != null && (
+                      <span className={s.statementVerified ? "text-good" : ""}>
+                        {" · biller says "}
+                        {fmtUSD(s.bill.statementAmount)}
+                        {s.statementVerified && " ✓"}
+                      </span>
+                    )}
                   </div>
+                  {s.bill.planInfo && (
+                    <div className="text-xs text-ink-muted mt-0.5 truncate max-w-md" title={s.bill.planInfo}>
+                      Plan: {s.bill.planInfo}
+                    </div>
+                  )}
                 </div>
                 {isEditing ? (
                   <div className="flex items-center gap-2 text-xs">

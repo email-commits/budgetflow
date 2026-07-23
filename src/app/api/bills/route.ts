@@ -62,11 +62,18 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** PATCH /api/bills — update. Body: { id, name?, match?, expectedAmount?, dueDay?, tolerance?, active? } */
+/**
+ * PATCH /api/bills — update.
+ * Body: { id, name?, match?, expectedAmount?, dueDay?, tolerance?, active?,
+ *         statementAmount?, statementDate?, planInfo? }
+ * Statement fields hold what the biller's own site says is due this cycle
+ * (pass null to clear). When present, bill status verifies exactly against them.
+ */
 export async function PATCH(req: NextRequest) {
   if (!dbConfigured()) return NextResponse.json({ error: "Requires a database." }, { status: 400 });
   try {
-    const { id, name, match, expectedAmount, dueDay, tolerance, active } = await req.json();
+    const { id, name, match, expectedAmount, dueDay, tolerance, active, statementAmount, statementDate, planInfo } =
+      await req.json();
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
     const data: Record<string, unknown> = {};
     if (name !== undefined) data.name = String(name).trim();
@@ -75,6 +82,9 @@ export async function PATCH(req: NextRequest) {
     if (dueDay !== undefined) data.dueDay = Math.max(1, Math.min(31, Number(dueDay)));
     if (tolerance !== undefined) data.tolerance = Math.max(0, Math.min(1, Number(tolerance)));
     if (active !== undefined) data.active = Boolean(active);
+    if (statementAmount !== undefined) data.statementAmount = statementAmount === null ? null : Number(statementAmount);
+    if (statementDate !== undefined) data.statementDate = statementDate || null;
+    if (planInfo !== undefined) data.planInfo = planInfo ? String(planInfo).slice(0, 2000) : null;
     const db = getDb();
     await db.bill.update({ where: { id }, data });
     return NextResponse.json({ ok: true });
