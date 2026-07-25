@@ -147,12 +147,23 @@ export default function Dashboard() {
           <h2 className="text-sm font-medium text-ink-secondary">This month</h2>
           {cur && (
             <div className="space-y-5 my-4">
-              <Stat label="Income" value={fmtUSD0(cur.income)} color="text-good" />
-              <Stat label="Spending" value={fmtUSD0(cur.spend)} color="text-ink-primary" />
+              <Stat
+                label="Income"
+                value={fmtUSD0(cur.income)}
+                color="text-good"
+                href={`/transactions?month=${thisMonth}&flow=in`}
+              />
+              <Stat
+                label="Spending"
+                value={fmtUSD0(cur.spend)}
+                color="text-ink-primary"
+                href={`/transactions?month=${thisMonth}&flow=out`}
+              />
               <Stat
                 label="Net"
                 value={`${cur.net >= 0 ? "+" : ""}${fmtUSD0(cur.net)}`}
                 color={cur.net >= 0 ? "text-good" : "text-critical"}
+                href="/cashflow"
               />
             </div>
           )}
@@ -179,13 +190,25 @@ export default function Dashboard() {
   );
 }
 
-function Stat({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <div>
+function Stat({ label, value, color, href }: { label: string; value: string; color: string; href?: string }) {
+  const inner = (
+    <>
       <div className="text-xs text-ink-muted">{label}</div>
       <div className={`text-2xl font-semibold tabular ${color}`}>{value}</div>
-    </div>
+    </>
   );
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className="block -mx-2 px-2 py-1 rounded-lg hover:bg-surface2 transition-colors cursor-pointer"
+        title={`View ${label.toLowerCase()} details`}
+      >
+        {inner}
+      </Link>
+    );
+  }
+  return <div>{inner}</div>;
 }
 
 function Loading() {
