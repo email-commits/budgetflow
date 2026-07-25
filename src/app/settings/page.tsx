@@ -15,6 +15,19 @@ declare global {
 
 const LINK_TOKEN_KEY = "budgetflow_plaid_link_token";
 
+/** Shape of the error object Plaid Link passes to onExit (null on clean exit). */
+interface PlaidExitError {
+  error_type?: string;
+  error_code?: string;
+  error_message?: string;
+  display_message?: string | null;
+}
+
+function formatPlaidExit(err: PlaidExitError): string {
+  const msg = err.display_message || err.error_message || "Link exited with an error";
+  return `Plaid Link: ${msg}${err.error_code ? ` (${err.error_code})` : ""}`;
+}
+
 interface BankInfo {
   id: string;
   name: string;
@@ -445,7 +458,10 @@ export default function SettingsPage() {
       token,
       receivedRedirectUri: window.location.href,
       onSuccess: handleSuccess,
-      onExit: () => setBusy(false),
+      onExit: (err: PlaidExitError) => {
+        if (err) setError(formatPlaidExit(err));
+        setBusy(false);
+      },
     });
     handler.open();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -466,7 +482,10 @@ export default function SettingsPage() {
       const handler = window.Plaid.create({
         token: json.link_token,
         onSuccess: handleSuccess,
-        onExit: () => setBusy(false),
+        onExit: (err: PlaidExitError) => {
+          if (err) setError(formatPlaidExit(err));
+          setBusy(false);
+        },
       });
       handler.open();
     } catch (e) {
