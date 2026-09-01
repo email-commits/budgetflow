@@ -14,6 +14,8 @@ import {
   netWorthSeries,
   spendByCategory,
 } from "@/lib/analytics";
+import { breakdownByInstitution } from "@/lib/institutions-client";
+import { accountTypeLabel, cashTotal, investedTotal } from "@/lib/investments";
 import { totalNetWorth } from "@/lib/types";
 import { detectAnomalies } from "@/lib/anomalies";
 import { InitialAvatar } from "@/components/MerchantLogo";
@@ -35,6 +37,9 @@ export default function Dashboard() {
   if (loading || !data) return <Loading />;
 
   const netWorth = totalNetWorth(data);
+  const invested = investedTotal(data.accounts);
+  const cash = cashTotal(data.accounts);
+  const instBreakdown = breakdownByInstitution(data.accounts);
   // Real recorded snapshots when we have enough of them; estimated series otherwise
   const history = data.netWorthHistory ?? [];
   const useReal = history.length >= 2;
@@ -62,8 +67,44 @@ export default function Dashboard() {
         <div className="text-right">
           <div className="text-xs text-ink-muted">Net worth</div>
           <div className="text-2xl font-semibold tabular">{fmtUSD0(netWorth)}</div>
+          <div className="text-xs text-ink-muted mt-0.5">
+            Invested {fmtUSD0(invested)}
+            {data.mode === "demo" ? " · demo data" : ""}
+          </div>
         </div>
       </header>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <MiniStat label="Net worth" value={fmtUSD0(netWorth)} />
+        <MiniStat label="Invested" value={fmtUSD0(invested)} />
+        <MiniStat label="Cash" value={fmtUSD0(cash)} />
+        <MiniStat
+          label="Institutions"
+          value={String(new Set(data.accounts.map((a) => a.institution)).size)}
+        />
+      </div>
+
+      {instBreakdown.length > 0 && (
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium text-ink-secondary">By institution</h2>
+            <Link href="/investments" className="text-xs text-series-1 hover:underline">
+              Investments →
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {instBreakdown.map((row) => (
+              <div key={row.group} className="bg-surface2 rounded-xl px-4 py-3">
+                <div className="text-xs text-ink-muted">{row.group}</div>
+                <div className="text-lg font-semibold tabular mt-0.5">{fmtUSD0(row.total)}</div>
+                <div className="text-xs text-ink-muted">
+                  {row.accounts} account{row.accounts === 1 ? "" : "s"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Alerts */}
       {anomalies.length > 0 && (
@@ -100,7 +141,7 @@ export default function Dashboard() {
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium truncate">{a.name}</div>
                   <div className="text-xs text-ink-muted">
-                    {a.institution} ••{a.mask}
+                    {a.institution} · {accountTypeLabel(a)} ••{a.mask}
                   </div>
                 </div>
                 <div className={`text-sm tabular ${a.balance < 0 ? "text-serious" : "text-ink-primary"}`}>
@@ -209,6 +250,15 @@ function Stat({ label, value, color, href }: { label: string; value: string; col
     );
   }
   return <div>{inner}</div>;
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="card p-4">
+      <div className="text-xs text-ink-muted">{label}</div>
+      <div className="text-xl font-semibold tabular mt-1">{value}</div>
+    </div>
+  );
 }
 
 function Loading() {

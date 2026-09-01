@@ -28,6 +28,8 @@ model Account {
   institution       String
   institutionDomain String?
   type              String // checking | savings | credit | investment | loan
+  /// Plaid account subtype (401k, ira, brokerage, checking, …)
+  subtype           String?
   mask              String
   balance           Float
   transactions      Transaction[]

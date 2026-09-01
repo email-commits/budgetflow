@@ -1,7 +1,8 @@
 import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 import fs from "fs";
 import path from "path";
-import { Account, Category, Transaction } from "./types";
+import { Account, Category, Holding, Transaction } from "./types";
+import { mapPlaidHoldings } from "./investments";
 
 export function plaidConfigured(): boolean {
   return Boolean(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
@@ -112,13 +113,45 @@ export function mapPlaidTransaction(t: any): Transaction {
   };
 }
 
+export interface PlaidApiError {
+  error_type?: string;
+  error_code?: string;
+  error_message?: string;
+  display_message?: string | null;
+}
+
+export function plaidError(e: unknown): PlaidApiError | undefined {
+  return (e as { response?: { data?: PlaidApiError } })?.response?.data;
+}
+
+export function formatPlaidError(e: unknown, fallback: string): string {
+  const err = plaidError(e);
+  if (err?.error_message) {
+    return `Plaid: ${err.error_message}${err.error_code ? ` (${err.error_code})` : ""}`;
+  }
+  return e instanceof Error ? e.message : fallback;
+}
+
+/** True when an Item simply doesn't have Transactions or Investments initialized. */
+export function isMissingProductError(e: unknown): boolean {
+  const code = plaidError(e)?.error_code;
+  return (
+    code === "INVALID_PRODUCT" ||
+    code === "PRODUCTS_NOT_SUPPORTED" ||
+    code === "PRODUCT_NOT_ENABLED" ||
+    code === "PRODUCT_NOT_READY" ||
+    code === "ITEM_NOT_SUPPORTED" ||
+    code === "NO_ACCOUNTS"
+  );
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapPlaidAccount(a: any, institution?: { name?: string; domain?: string }): Account {
   const subtype: string = a.subtype ?? "";
   const type: Account["type"] =
     a.type === "credit" ? "credit"
     : a.type === "loan" ? "loan"
-    : a.type === "investment" ? "investment"
+    : a.type === "investment" || a.type === "brokerage" ? "investment"
     : subtype === "savings" ? "savings"
     : "checking";
   const raw = a.balances?.current ?? 0;
@@ -130,7 +163,18 @@ export function mapPlaidAccount(a: any, institution?: { name?: string; domain?: 
     institution: institution?.name ?? "Bank",
     institutionDomain: institution?.domain,
     type,
+    subtype: subtype || a.type || undefined,
     mask: a.mask ?? "0000",
     balance: liability ? -Math.abs(raw) : raw,
   };
+}
+
+/** `/investments/holdings/get` — returns [] when the Item has no Investments product. */
+export async function fetchHoldings(
+  client: PlaidApi,
+  accessToken: string,
+  accounts: { id: string; name: string }[]
+): Promise<Holding[]> {
+  const resp = await client.investmentsHoldingsGet({ access_token: accessToken });
+  return mapPlaidHoldings(resp.data.holdings, resp.data.securities, accounts);
 }

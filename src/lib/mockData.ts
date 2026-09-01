@@ -76,10 +76,10 @@ const RECURRING: RecurringDef[] = [
 ];
 
 export const ACCOUNTS: Account[] = [
-  { id: "acc_chk", name: "Everyday Checking", institution: "Chase", institutionDomain: "chase.com", type: "checking", mask: "4821", balance: 6412.37 },
-  { id: "acc_sav", name: "High-Yield Savings", institution: "Ally Bank", institutionDomain: "ally.com", type: "savings", mask: "1177", balance: 21390.12 },
-  { id: "acc_cc", name: "Sapphire Preferred", institution: "Chase", institutionDomain: "chase.com", type: "credit", mask: "7730", balance: -1843.55 },
-  { id: "acc_inv", name: "Brokerage", institution: "Fidelity", institutionDomain: "fidelity.com", type: "investment", mask: "0093", balance: 48210.9 },
+  { id: "acc_chk", name: "Everyday Checking", institution: "Chase", institutionDomain: "chase.com", type: "checking", subtype: "checking", mask: "4821", balance: 6412.37 },
+  { id: "acc_sav", name: "High-Yield Savings", institution: "Ally Bank", institutionDomain: "ally.com", type: "savings", subtype: "savings", mask: "1177", balance: 21390.12 },
+  { id: "acc_cc", name: "Sapphire Preferred", institution: "Chase", institutionDomain: "chase.com", type: "credit", subtype: "credit card", mask: "7730", balance: -1843.55 },
+  { id: "acc_inv", name: "Brokerage", institution: "Fidelity", institutionDomain: "fidelity.com", type: "investment", subtype: "brokerage", mask: "0093", balance: 48210.9 },
 ];
 
 export const BUDGETS: Budget[] = [
@@ -179,5 +179,5 @@ export function generateDemoData(today = new Date()): AppData {
 
   txs.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
-  return { mode: "demo", accounts: ACCOUNTS, transactions: txs, budgets: BUDGETS };
+  return { mode: "demo", accounts: ACCOUNTS, transactions: txs, budgets: BUDGETS, holdings: [] };
 }

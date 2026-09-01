@@ -3,14 +3,16 @@ import { aiEnabled } from "./ai";
 import { dbConfigured, getDb } from "./db";
 import { syncAll } from "./sync";
 import {
+  fetchHoldings,
   getPlaidClient,
   hasLinkedItem,
+  isMissingProductError,
   mapPlaidAccount,
   mapPlaidTransaction,
   plaidConfigured,
   readStore,
 } from "./plaid";
-import { Account, AppData, Budget, Category, Rule, Transaction } from "./types";
+import { Account, AppData, Budget, Category, Holding, Rule, Transaction } from "./types";
 
 /**
  * Fetch app data.
@@ -116,6 +118,7 @@ async function getAppDataFromDb(force: boolean): Promise<AppData> {
         institution: a.institution,
         institutionDomain: a.institutionDomain ?? undefined,
         type: a.type as Account["type"],
+        subtype: a.subtype ?? undefined,
         mask: a.mask,
         balance: a.balance,
       })
@@ -172,6 +175,7 @@ async function getAppDataLegacy(): Promise<AppData> {
     const store = readStore();
     const accounts: Account[] = [];
     const transactions: Transaction[] = [];
+    const holdings: Holding[] = [];
 
     for (const item of store.items) {
       let institution: { name?: string; domain?: string } | undefined;
@@ -194,20 +198,39 @@ async function getAppDataLegacy(): Promise<AppData> {
       }
 
       const acctResp = await client.accountsGet({ access_token: item.accessToken });
-      for (const a of acctResp.data.accounts) accounts.push(mapPlaidAccount(a, institution));
+      const mappedAccounts = acctResp.data.accounts.map((a) => mapPlaidAccount(a, institution));
+      accounts.push(...mappedAccounts);
 
-      let cursor: string | undefined = undefined;
-      let hasMore = true;
-      while (hasMore) {
-        const resp = await client.transactionsSync({ access_token: item.accessToken, cursor, count: 500 });
-        for (const t of resp.data.added) transactions.push(mapPlaidTransaction(t));
-        cursor = resp.data.next_cursor;
-        hasMore = resp.data.has_more;
+      try {
+        let cursor: string | undefined = undefined;
+        let hasMore = true;
+        while (hasMore) {
+          const resp = await client.transactionsSync({ access_token: item.accessToken, cursor, count: 500 });
+          for (const t of resp.data.added) transactions.push(mapPlaidTransaction(t));
+          cursor = resp.data.next_cursor;
+          hasMore = resp.data.has_more;
+        }
+      } catch (e) {
+        if (!isMissingProductError(e)) throw e;
+      }
+
+      try {
+        holdings.push(
+          ...(await fetchHoldings(
+            client,
+            item.accessToken,
+            mappedAccounts.map((a) => ({ id: a.id, name: a.name }))
+          ))
+        );
+      } catch (e) {
+        if (!isMissingProductError(e)) {
+          console.warn("Holdings fetch skipped:", e);
+        }
       }
     }
 
     transactions.sort((a, b) => (a.date < b.date ? 1 : -1));
-    return { mode: "plaid", accounts, transactions, budgets: BUDGETS };
+    return { mode: "plaid", accounts, transactions, budgets: BUDGETS, holdings };
   } catch (e) {
     console.error("Plaid fetch failed, serving demo data:", e);
     return generateDemoData();
