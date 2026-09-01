@@ -6,7 +6,7 @@ import { useAppData } from "@/components/DataProvider";
 import { AllocationDonut, ALLOCATION_COLORS } from "@/components/charts";
 import { BrokerageConnectButtons, PlaidScript, usePlaidConnect } from "@/components/PlaidConnect";
 import { fmtUSD, fmtUSD0 } from "@/lib/analytics";
-import { breakdownByInstitution } from "@/lib/institutions";
+import { breakdownByInstitution } from "@/lib/institutions-client";
 import { accountTypeLabel, allocationSlices, investedTotal, isInvestmentAccount } from "@/lib/investments";
 import { totalNetWorth } from "@/lib/types";
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Script from "next/script";
-import { BROKER_SEARCH, BROKER_TARGETS, LinkTarget } from "@/lib/institutions";
+import { BROKER_SEARCH, BROKER_TARGETS, LinkTarget } from "@/lib/institutions-client";
 
 declare global {
   interface Window {

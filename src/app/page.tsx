@@ -14,7 +14,7 @@ import {
   netWorthSeries,
   spendByCategory,
 } from "@/lib/analytics";
-import { breakdownByInstitution } from "@/lib/institutions";
+import { breakdownByInstitution } from "@/lib/institutions-client";
 import { accountTypeLabel, cashTotal, investedTotal } from "@/lib/investments";
 import { totalNetWorth } from "@/lib/types";
 import { detectAnomalies } from "@/lib/anomalies";
