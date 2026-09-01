@@ -2,7 +2,15 @@ import { PlaidApi } from "plaid";
 import { PrismaClient } from "@prisma/client";
 import { getDb } from "./db";
 import { decryptToken, encryptToken, encryptionEnabled, isEncrypted } from "./crypto";
-import { getPlaidClient, mapPlaidAccount, mapPlaidTransaction, plaidConfigured, readStore } from "./plaid";
+import {
+  fetchHoldings,
+  getPlaidClient,
+  isMissingProductError,
+  mapPlaidAccount,
+  mapPlaidTransaction,
+  plaidConfigured,
+  readStore,
+} from "./plaid";
 
 const STALE_AFTER_MS = 15 * 60 * 1000; // re-sync at most every 15 minutes
 
@@ -81,7 +89,13 @@ async function syncItem(
     });
     await db.account.upsert({
       where: { id: mapped.id },
-      update: { name: mapped.name, balance: mapped.balance, type: mapped.type, mask: mapped.mask },
+      update: {
+        name: mapped.name,
+        balance: mapped.balance,
+        type: mapped.type,
+        subtype: mapped.subtype ?? null,
+        mask: mapped.mask,
+      },
       create: {
         id: mapped.id,
         itemId: item.id,
@@ -89,52 +103,34 @@ async function syncItem(
         institution: mapped.institution,
         institutionDomain: mapped.institutionDomain,
         type: mapped.type,
+        subtype: mapped.subtype ?? null,
         mask: mapped.mask,
         balance: mapped.balance,
       },
     });
   }
 
-  // transactions via cursor — batched writes (critical for the initial 2-year backfill)
+  // transactions via cursor — batched writes (critical for the initial 2-year backfill).
+  // Brokerage-only Items may not have Transactions; skip quietly in that case.
   const validAccountIds = new Set(acctResp.data.accounts.map((a) => a.account_id));
   let cursor = item.cursor ?? undefined;
-  let hasMore = true;
-  while (hasMore) {
-    const resp = await client.transactionsSync({
-      access_token: accessToken,
-      cursor,
-      count: 500,
-    });
-
-    // new transactions: one bulk insert per page instead of one write per row
-    const added = resp.data.added
-      .filter((t) => validAccountIds.has(t.account_id))
-      .map((t) => {
-        const m = mapPlaidTransaction(t);
-        return {
-          id: m.id,
-          accountId: m.accountId,
-          date: m.date,
-          merchant: m.merchant,
-          merchantDomain: m.merchantDomain ?? null,
-          logoUrl: m.logoUrl ?? null,
-          category: m.category,
-          amount: m.amount,
-          pending: m.pending ?? false,
-        };
+  try {
+    let hasMore = true;
+    while (hasMore) {
+      const resp = await client.transactionsSync({
+        access_token: accessToken,
+        cursor,
+        count: 500,
       });
-    if (added.length > 0) {
-      await db.transaction.createMany({ data: added, skipDuplicates: true });
-    }
 
-    // modified are rare — per-row updates are fine
-    for (const t of resp.data.modified) {
-      if (!validAccountIds.has(t.account_id)) continue;
-      const m = mapPlaidTransaction(t);
-      await db.transaction
-        .update({
-          where: { id: m.id },
-          data: {
+      // new transactions: one bulk insert per page instead of one write per row
+      const added = resp.data.added
+        .filter((t) => validAccountIds.has(t.account_id))
+        .map((t) => {
+          const m = mapPlaidTransaction(t);
+          return {
+            id: m.id,
+            accountId: m.accountId,
             date: m.date,
             merchant: m.merchant,
             merchantDomain: m.merchantDomain ?? null,
@@ -142,45 +138,79 @@ async function syncItem(
             category: m.category,
             amount: m.amount,
             pending: m.pending ?? false,
-          },
-        })
-        .catch(() => {}); // modified row we never inserted — ignore
-    }
+          };
+        });
+      if (added.length > 0) {
+        await db.transaction.createMany({ data: added, skipDuplicates: true });
+      }
 
-    if (resp.data.removed.length > 0) {
-      await db.transaction.deleteMany({
-        where: { id: { in: resp.data.removed.map((r) => r.transaction_id!).filter(Boolean) } },
-      });
+      // modified are rare — per-row updates are fine
+      for (const t of resp.data.modified) {
+        if (!validAccountIds.has(t.account_id)) continue;
+        const m = mapPlaidTransaction(t);
+        await db.transaction
+          .update({
+            where: { id: m.id },
+            data: {
+              date: m.date,
+              merchant: m.merchant,
+              merchantDomain: m.merchantDomain ?? null,
+              logoUrl: m.logoUrl ?? null,
+              category: m.category,
+              amount: m.amount,
+              pending: m.pending ?? false,
+            },
+          })
+          .catch(() => {}); // modified row we never inserted — ignore
+      }
+
+      if (resp.data.removed.length > 0) {
+        await db.transaction.deleteMany({
+          where: { id: { in: resp.data.removed.map((r) => r.transaction_id!).filter(Boolean) } },
+        });
+      }
+      cursor = resp.data.next_cursor;
+      hasMore = resp.data.has_more;
     }
-    cursor = resp.data.next_cursor;
-    hasMore = resp.data.has_more;
+  } catch (e) {
+    if (!isMissingProductError(e)) throw e;
   }
 
-  // investment holdings — best effort: not every item/institution has the product
+  // `/investments/holdings/get` — requires the Investments product on the Item
   try {
-    const hResp = await client.investmentsHoldingsGet({ access_token: accessToken });
-    const securities = new Map(hResp.data.securities.map((s) => [s.security_id, s]));
-    const accountIds = new Set(acctResp.data.accounts.map((a) => a.account_id));
-    for (const h of hResp.data.holdings) {
-      if (!accountIds.has(h.account_id)) continue;
-      const sec = securities.get(h.security_id);
-      const id = `${h.account_id}:${h.security_id}`;
+    const mappedHoldings = await fetchHoldings(
+      client,
+      accessToken,
+      acctResp.data.accounts.map((a) => ({ id: a.account_id, name: a.name }))
+    );
+    const seen = new Set<string>();
+    for (const h of mappedHoldings) {
+      if (!validAccountIds.has(h.accountId)) continue;
+      seen.add(h.id);
       const data = {
-        name: sec?.name ?? sec?.ticker_symbol ?? "Unknown security",
-        ticker: sec?.ticker_symbol ?? null,
-        type: sec?.type ?? null,
+        name: h.name,
+        ticker: h.ticker ?? null,
+        type: h.type ?? null,
         quantity: h.quantity,
-        value: h.institution_value ?? 0,
-        costBasis: h.cost_basis ?? null,
+        value: h.value,
+        costBasis: h.costBasis ?? null,
       };
       await db.holding.upsert({
-        where: { id },
+        where: { id: h.id },
         update: data,
-        create: { id, accountId: h.account_id, ...data },
+        create: { id: h.id, accountId: h.accountId, ...data },
       });
     }
-  } catch {
-    // investments product not enabled for this item — fine, skip quietly
+    await db.holding.deleteMany({
+      where: {
+        accountId: { in: [...validAccountIds] },
+        ...(seen.size > 0 ? { id: { notIn: [...seen] } } : {}),
+      },
+    });
+  } catch (e) {
+    if (!isMissingProductError(e)) {
+      console.warn(`Holdings sync skipped for item ${item.id}:`, e);
+    }
   }
 
   await db.plaidItem.update({

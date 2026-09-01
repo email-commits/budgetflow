@@ -1,32 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Script from "next/script";
 import { useAppData } from "@/components/DataProvider";
+import { BrokerageConnectButtons, PlaidScript, usePlaidConnect } from "@/components/PlaidConnect";
 import { CATEGORY_COLORS, fmtUSD0 } from "@/lib/analytics";
 import { Category, ManualAsset, Rule } from "@/lib/types";
-
-declare global {
-  interface Window {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    Plaid?: any;
-  }
-}
-
-const LINK_TOKEN_KEY = "budgetflow_plaid_link_token";
-
-/** Shape of the error object Plaid Link passes to onExit (null on clean exit). */
-interface PlaidExitError {
-  error_type?: string;
-  error_code?: string;
-  error_message?: string;
-  display_message?: string | null;
-}
-
-function formatPlaidExit(err: PlaidExitError): string {
-  const msg = err.display_message || err.error_message || "Link exited with an error";
-  return `Plaid Link: ${msg}${err.error_code ? ` (${err.error_code})` : ""}`;
-}
 
 interface BankInfo {
   id: string;
@@ -374,10 +352,6 @@ function AssetsCard({ assets, onChanged }: { assets: ManualAsset[]; onChanged: (
 
 export default function SettingsPage() {
   const { data, refresh } = useAppData();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [linked, setLinked] = useState(false);
-  const [pendingToken, setPendingToken] = useState<string | null>(null);
   const [banks, setBanks] = useState<BankInfo[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
@@ -418,95 +392,26 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSuccess = useCallback(
-    async (public_token: string) => {
-      try {
-        const ex = await fetch("/api/plaid/exchange", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ public_token }),
-        });
-        const json = await ex.json();
-        if (!ex.ok) throw new Error(json.error ?? "Token exchange failed");
-        setLinked(true);
-        if (json.persisted === false && json.accessToken) {
-          // Deployed (read-only filesystem): show the token once so it can be
-          // moved into the PLAID_ACCESS_TOKEN env var.
-          setPendingToken(json.accessToken);
-        }
-        await refresh();
-        await loadBanks();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Token exchange failed");
-      } finally {
-        localStorage.removeItem(LINK_TOKEN_KEY);
-        setBusy(false);
-      }
-    },
-    [refresh, loadBanks]
-  );
+  const afterLink = useCallback(async () => {
+    await refresh();
+    await loadBanks();
+  }, [refresh, loadBanks]);
 
-  // Resume an OAuth redirect (real banks like Chase bounce through the bank's
-  // site and return here with ?oauth_state_id=...)
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (!params.get("oauth_state_id")) return;
-    const token = localStorage.getItem(LINK_TOKEN_KEY);
-    if (!token || !window.Plaid) return;
-    setBusy(true);
-    const handler = window.Plaid.create({
-      token,
-      receivedRedirectUri: window.location.href,
-      onSuccess: handleSuccess,
-      onExit: (err: PlaidExitError) => {
-        if (err) setError(formatPlaidExit(err));
-        setBusy(false);
-      },
-    });
-    handler.open();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const connect = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const resp = await fetch("/api/plaid/create_link_token", { method: "POST" });
-      const json = await resp.json();
-      if (!resp.ok) throw new Error(json.error ?? "Could not create link token");
-      if (!window.Plaid) throw new Error("Plaid Link script not loaded yet — try again in a second.");
-
-      // Persist the link token so the OAuth redirect flow can resume with it
-      localStorage.setItem(LINK_TOKEN_KEY, json.link_token);
-
-      const handler = window.Plaid.create({
-        token: json.link_token,
-        onSuccess: handleSuccess,
-        onExit: (err: PlaidExitError) => {
-          if (err) setError(formatPlaidExit(err));
-          setBusy(false);
-        },
-      });
-      handler.open();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
-      setBusy(false);
-    }
-  };
+  const { busy, busyTarget, error, linked, pendingToken, connect } = usePlaidConnect(afterLink);
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <Script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js" strategy="afterInteractive" />
+      <PlaidScript />
 
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-sm text-ink-muted mt-1">Connect your bank accounts through Plaid</p>
+        <p className="text-sm text-ink-muted mt-1">Connect banks and brokerages through Plaid</p>
       </header>
 
       <div className="card p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="font-medium">Bank connection</h2>
+            <h2 className="font-medium">Connections</h2>
             <p className="text-sm text-ink-muted mt-0.5">
               {data?.mode === "plaid" || linked ? "Live data via Plaid" : "Currently showing demo data"}
             </p>
@@ -520,12 +425,21 @@ export default function SettingsPage() {
           </span>
         </div>
 
+        <div>
+          <h3 className="text-sm font-medium text-ink-secondary mb-2">Brokerages &amp; retirement</h3>
+          <p className="text-xs text-ink-muted mb-3">
+            Opens Plaid Link targeted at the institution when Plaid allows it; otherwise the full search list.
+            Holdings require the Investments product — Transactions alone is not enough.
+          </p>
+          <BrokerageConnectButtons connect={connect} busy={busy} busyTarget={busyTarget} />
+        </div>
+
         <button
-          onClick={connect}
+          onClick={() => connect("bank")}
           disabled={busy}
-          className="bg-series-1 hover:opacity-90 disabled:opacity-50 text-white text-sm font-medium rounded-xl px-5 py-2.5 transition-opacity"
+          className="border border-white/15 hover:bg-surface2 disabled:opacity-50 text-ink-primary text-sm font-medium rounded-xl px-5 py-2.5 transition-colors"
         >
-          {busy ? "Opening Plaid Link…" : "Connect a bank with Plaid"}
+          {busy && busyTarget === "bank" ? "Opening Plaid Link…" : "Connect a bank"}
         </button>
 
         {error && <p className="text-sm text-critical">{error}</p>}
@@ -533,7 +447,7 @@ export default function SettingsPage() {
         {banks.length > 0 && (
           <div className="pt-2 space-y-2">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium text-ink-secondary">Linked banks</h3>
+              <h3 className="text-sm font-medium text-ink-secondary">Linked institutions</h3>
               <button
                 onClick={syncNow}
                 disabled={syncing}
@@ -601,7 +515,12 @@ export default function SettingsPage() {
           <b>Production</b> (<code className="bg-surface2 px-1.5 py-0.5 rounded">PLAID_ENV=production</code>): needs
           approved production access at dashboard.plaid.com, your production secret, and — for OAuth banks like
           Chase — <code className="bg-surface2 px-1.5 py-0.5 rounded">PLAID_REDIRECT_URI</code> set to this page&apos;s
-          URL and registered under Allowed redirect URIs in the Plaid dashboard.
+          URL and registered under Allowed redirect URIs in the Plaid dashboard. Enable the{" "}
+          <b>Investments</b> product for holdings. Fidelity production access is typically Growth/Custom (or a
+          Dashboard request on Pay-as-you-go) and can take weeks after Production is granted. Schwab OAuth can take
+          up to six weeks. Workplace 401(k) plans (including some T. Rowe Price plans) may appear under the plan
+          administrator&apos;s login portal rather than the fund company name — search for that name in Link if the
+          targeted button doesn&apos;t match.
         </p>
       </div>
     </div>

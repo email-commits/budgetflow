@@ -18,6 +18,8 @@ export interface Account {
   institution: string;
   institutionDomain?: string;
   type: "checking" | "savings" | "credit" | "investment" | "loan";
+  /** Plaid account subtype: 401k, ira, brokerage, checking, … */
+  subtype?: string;
   mask: string;
   balance: number; // positive = asset, negative = liability
 }
