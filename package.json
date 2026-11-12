@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "tsx --test src/lib/backup.test.ts",
+    "test": "tsx --test src/lib/backup.test.ts src/lib/types.test.ts src/lib/categories.test.ts",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "backup:decrypt": "tsx scripts/backup.ts decrypt",

@@ -84,19 +84,28 @@ const PFC_MAP: Record<string, Category> = {
   GENERAL_SERVICES: "Other",
   GOVERNMENT_AND_NON_PROFIT: "Other",
   HOME_IMPROVEMENT: "Shopping",
-  LOAN_PAYMENTS: "Housing",
+  LOAN_PAYMENTS: "Debt Payment", // refined by detailed category in mapPlaidCategory
   BANK_FEES: "Other",
   TRANSFER_IN: "Other",
   TRANSFER_OUT: "Other",
 };
 
+/** Plaid personal_finance_category -> app category. */
+export function mapPlaidCategory(primary?: string | null, detailed?: string | null): Category {
+  const d = detailed ?? "";
+  if (primary === "FOOD_AND_DRINK" && d.includes("GROCERIES")) return "Groceries";
+  if (primary === "LOAN_PAYMENTS") {
+    // paying a card is a transfer (the purchases were already counted on the card)
+    if (d.includes("CREDIT_CARD_PAYMENT")) return "Transfer";
+    if (d.includes("MORTGAGE")) return "Housing";
+    return "Debt Payment"; // car, student, personal and other loans
+  }
+  return (primary && PFC_MAP[primary]) || "Other";
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapPlaidTransaction(t: any): Transaction {
-  const pfc: string | undefined = t.personal_finance_category?.primary;
-  let category: Category = (pfc && PFC_MAP[pfc]) || "Other";
-  if (pfc === "FOOD_AND_DRINK" && t.personal_finance_category?.detailed?.includes("GROCERIES")) {
-    category = "Groceries";
-  }
+  const category = mapPlaidCategory(t.personal_finance_category?.primary, t.personal_finance_category?.detailed);
   const domain = t.website ?? undefined;
   return {
     id: t.transaction_id,

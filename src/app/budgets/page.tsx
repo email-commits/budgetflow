@@ -12,6 +12,7 @@ const ALL_CATEGORIES: Category[] = [
   "Transport",
   "Subscriptions",
   "Housing",
+  "Debt Payment",
   "Utilities",
   "Health",
   "Entertainment",

@@ -44,10 +44,12 @@ const RULE_CATEGORIES: Category[] = [
   "Transport",
   "Subscriptions",
   "Housing",
+  "Debt Payment",
   "Utilities",
   "Health",
   "Entertainment",
   "Travel",
+  "Transfer",
   "Other",
 ];
 
@@ -380,6 +382,7 @@ export default function SettingsPage() {
   const [pendingToken, setPendingToken] = useState<string | null>(null);
   const [banks, setBanks] = useState<BankInfo[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const [recat, setRecat] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
 
   const removeBank = async (id: string) => {
@@ -406,6 +409,22 @@ export default function SettingsPage() {
   useEffect(() => {
     loadBanks();
   }, [loadBanks]);
+
+  const recategorize = async () => {
+    setRecat("Re-applying…");
+    try {
+      const resp = await fetch("/api/sync?recategorize=1", { method: "POST" });
+      const json = await resp.json();
+      if (!resp.ok) throw new Error(json.error ?? "failed");
+      setRecat(
+        `${json.updated} transaction${json.updated === 1 ? "" : "s"} updated` +
+          (json.errors ? ` · ${json.errors} bank${json.errors === 1 ? "" : "s"} failed` : "")
+      );
+      await refresh();
+    } catch (e) {
+      setRecat(e instanceof Error ? e.message : "failed");
+    }
+  };
 
   const syncNow = async () => {
     setSyncing(true);
@@ -534,13 +553,23 @@ export default function SettingsPage() {
           <div className="pt-2 space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium text-ink-secondary">Linked banks</h3>
-              <button
-                onClick={syncNow}
-                disabled={syncing}
-                className="text-xs text-series-1 hover:underline disabled:opacity-50"
-              >
-                {syncing ? "Syncing…" : "Sync now"}
-              </button>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={recategorize}
+                  disabled={recat === "Re-applying…"}
+                  className="text-xs text-series-1 hover:underline disabled:opacity-50"
+                  title="Re-apply category mapping (e.g. Debt Payment, Transfer) to past transactions. Your own edits are kept."
+                >
+                  {recat ?? "Re-apply categories"}
+                </button>
+                <button
+                  onClick={syncNow}
+                  disabled={syncing}
+                  className="text-xs text-series-1 hover:underline disabled:opacity-50"
+                >
+                  {syncing ? "Syncing…" : "Sync now"}
+                </button>
+              </div>
             </div>
             {banks.map((b) => (
               <div key={b.id} className="flex items-center justify-between bg-surface2 rounded-xl px-4 py-3">

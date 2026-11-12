@@ -1,11 +1,21 @@
 "use client";
 
 import { CATEGORY_COLORS, fmtUSD } from "@/lib/analytics";
-import { Transaction } from "@/lib/types";
+import { Account, paymentKind, Transaction } from "@/lib/types";
 import MerchantLogo from "./MerchantLogo";
 
-export default function TxRow({ tx, onClick }: { tx: Transaction; onClick?: () => void }) {
+export default function TxRow({
+  tx,
+  account,
+  onClick,
+}: {
+  tx: Transaction;
+  /** the account this transaction posted to — shows "Credit card" / "Debit" on the row */
+  account?: Account;
+  onClick?: () => void;
+}) {
   const positive = tx.amount > 0;
+  const kind = account ? paymentKind(account) : null;
   return (
     <div
       onClick={onClick}
@@ -35,6 +45,16 @@ export default function TxRow({ tx, onClick }: { tx: Transaction; onClick?: () =
             style={{ background: CATEGORY_COLORS[tx.category] }}
           />
           {tx.category}
+          {kind && account && (
+            <span
+              className={`ml-1 text-[10px] uppercase tracking-wide rounded-full px-1.5 py-px border ${
+                kind === "Credit card" ? "text-series-1 border-series-1/40" : "text-ink-secondary border-white/20"
+              }`}
+              title={`${account.name} · ${account.institution} ••${account.mask}`}
+            >
+              {kind} ••{account.mask}
+            </span>
+          )}
         </div>
       </div>
       <div className={`text-sm font-medium tabular ${positive ? "text-good" : "text-ink-primary"}`}>

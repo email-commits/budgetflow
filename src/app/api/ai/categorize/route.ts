@@ -13,10 +13,12 @@ const CATEGORIES = [
   "Transport",
   "Subscriptions",
   "Housing",
+  "Debt Payment",
   "Utilities",
   "Health",
   "Entertainment",
   "Travel",
+  "Transfer",
   "Other",
 ];
 
@@ -64,7 +66,7 @@ export async function POST() {
     const text = await askClaude({
       system: `You categorize personal-finance merchants. Allowed categories: ${CATEGORIES.join(", ")}.
 Respond with ONLY a JSON array: [{"merchant": "<exact name>", "category": "<category>", "cleanName": "<short friendly name or null>", "confident": true|false}].
-Rules: use "Income" only for payroll/deposits. Transfers, payments to credit cards, and unclear items get "confident": false. cleanName only when the raw name is cryptic (e.g. "AMZN Mktp US*7Y2" -> "Amazon").`,
+Rules: use "Income" only for payroll/deposits. Payments to a credit card and moves between the user's own accounts are "Transfer". Loan payments (auto, student, personal; not mortgage or rent) are "Debt Payment". Unclear items get "confident": false. cleanName only when the raw name is cryptic (e.g. "AMZN Mktp US*7Y2" -> "Amazon").`,
       messages: [{ role: "user", content: JSON.stringify(merchants) }],
       maxTokens: 4000,
     });

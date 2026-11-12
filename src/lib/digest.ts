@@ -15,7 +15,7 @@ export interface WeeklyDigest {
 }
 
 function isTransfer(t: Transaction): boolean {
-  return t.hidden === true || t.merchant.toLowerCase().includes("transfer");
+  return t.hidden === true || t.category === "Transfer" || t.merchant.toLowerCase().includes("transfer");
 }
 
 function iso(d: Date): string {

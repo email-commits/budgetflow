@@ -181,7 +181,7 @@ export default function Dashboard() {
           </div>
           <div>
             {recent.map((t) => (
-              <TxRow key={t.id} tx={t} />
+              <TxRow key={t.id} tx={t} account={data.accounts.find((a) => a.id === t.accountId)} />
             ))}
           </div>
         </div>
