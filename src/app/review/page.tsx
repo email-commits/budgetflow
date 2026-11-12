@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAppData } from "@/components/DataProvider";
-import { CATEGORY_COLORS, fmtUSD0, monthKey } from "@/lib/analytics";
+import { categoryColor, fmtUSD0, monthKey } from "@/lib/analytics";
 import { computeMonthlyReview, monthTitle, shiftMonth } from "@/lib/review";
 import MerchantLogo from "@/components/MerchantLogo";
 
@@ -148,7 +148,7 @@ export default function ReviewPage() {
             {review.budgets.map((b) => (
               <div key={b.category} className="bg-surface2 rounded-xl px-3.5 py-3">
                 <div className="flex items-center gap-1.5 text-xs text-ink-secondary">
-                  <span className="w-2 h-2 rounded-full" style={{ background: CATEGORY_COLORS[b.category] }} />
+                  <span className="w-2 h-2 rounded-full" style={{ background: categoryColor(b.category) }} />
                   {b.category}
                 </div>
                 <div className={`text-sm tabular mt-1 ${b.over ? "text-critical" : "text-good"}`}>
@@ -169,7 +169,7 @@ function CategoryDelta({ c }: { c: { category: string; total: number; avg: numbe
     <div className="flex items-center gap-3">
       <span
         className="w-2.5 h-2.5 rounded-full shrink-0"
-        style={{ background: CATEGORY_COLORS[c.category as keyof typeof CATEGORY_COLORS] }}
+        style={{ background: categoryColor(c.category) }}
       />
       <span className="text-sm flex-1">{c.category}</span>
       <div className="text-right">

@@ -71,36 +71,77 @@ export function hasLinkedItem(): boolean {
 
 // ---- mapping Plaid -> app types ----
 
-const PFC_MAP: Record<string, Category> = {
-  INCOME: "Income",
-  FOOD_AND_DRINK: "Dining",
+/** Plaid primary category -> app category, when the detailed code has no entry below. */
+const PFC_PRIMARY: Record<string, Category> = {
+  INCOME: "Other Income",
+  TRANSFER_IN: "Uncategorized",
+  TRANSFER_OUT: "Uncategorized",
+  LOAN_PAYMENTS: "Loan Repayment",
+  BANK_FEES: "Financial Fees",
+  ENTERTAINMENT: "Entertainment & Recreation",
+  FOOD_AND_DRINK: "Restaurants & Bars",
   GENERAL_MERCHANDISE: "Shopping",
-  TRANSPORTATION: "Transport",
-  TRAVEL: "Travel",
-  RENT_AND_UTILITIES: "Utilities",
-  ENTERTAINMENT: "Entertainment",
-  MEDICAL: "Health",
-  PERSONAL_CARE: "Health",
-  GENERAL_SERVICES: "Other",
-  GOVERNMENT_AND_NON_PROFIT: "Other",
-  HOME_IMPROVEMENT: "Shopping",
-  LOAN_PAYMENTS: "Debt Payment", // refined by detailed category in mapPlaidCategory
-  BANK_FEES: "Other",
-  TRANSFER_IN: "Other",
-  TRANSFER_OUT: "Other",
+  HOME_IMPROVEMENT: "Home Improvement",
+  MEDICAL: "Medical",
+  PERSONAL_CARE: "Personal Care",
+  GENERAL_SERVICES: "Miscellaneous",
+  GOVERNMENT_AND_NON_PROFIT: "Miscellaneous",
+  TRANSPORTATION: "Other Transport",
+  TRAVEL: "Travel & Vacation",
+  RENT_AND_UTILITIES: "Other Utilities",
 };
 
-/** Plaid personal_finance_category -> app category. */
+/** Plaid detailed category -> app category (only where it differs from the primary default). */
+const PFC_DETAILED: Record<string, Category> = {
+  INCOME_WAGES: "Paychecks",
+  INCOME_INTEREST_EARNED: "Interest",
+  // moves between your own accounts; other transfers stay Uncategorized so
+  // person-to-person payments (Venmo, Zelle) are not silently dropped from spending
+  TRANSFER_IN_SAVINGS: "Transfer",
+  TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS: "Transfer",
+  TRANSFER_IN_CASH_ADVANCES_AND_LOANS: "Transfer",
+  TRANSFER_OUT_SAVINGS: "Transfer",
+  TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS: "Transfer",
+  TRANSFER_OUT_WITHDRAWAL: "Cash & ATM",
+  // paying a card is a transfer: the purchases were already counted on the card
+  LOAN_PAYMENTS_CREDIT_CARD_PAYMENT: "Credit Card Payment",
+  LOAN_PAYMENTS_CAR_PAYMENT: "Auto Payment",
+  LOAN_PAYMENTS_MORTGAGE_PAYMENT: "Mortgage",
+  LOAN_PAYMENTS_STUDENT_LOAN_PAYMENT: "Student Loans",
+  FOOD_AND_DRINK_GROCERIES: "Groceries",
+  FOOD_AND_DRINK_COFFEE: "Coffee Shops",
+  GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES: "Clothing",
+  GENERAL_MERCHANDISE_ELECTRONICS: "Electronics",
+  GENERAL_MERCHANDISE_PET_SUPPLIES: "Pets",
+  GENERAL_MERCHANDISE_GIFTS_AND_NOVELTIES: "Gifts",
+  HOME_IMPROVEMENT_FURNITURE: "Furniture & Housewares",
+  MEDICAL_DENTAL_CARE: "Dentist",
+  MEDICAL_VETERINARY_SERVICES: "Pets",
+  PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS: "Fitness",
+  GENERAL_SERVICES_INSURANCE: "Insurance",
+  GENERAL_SERVICES_CHILDCARE: "Child Care",
+  GENERAL_SERVICES_EDUCATION: "Education",
+  GENERAL_SERVICES_AUTOMOTIVE: "Auto Maintenance",
+  GENERAL_SERVICES_ACCOUNTING_AND_FINANCIAL_PLANNING: "Financial & Legal Services",
+  GENERAL_SERVICES_CONSULTING_AND_LEGAL: "Financial & Legal Services",
+  GOVERNMENT_AND_NON_PROFIT_DONATIONS: "Charity",
+  GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT: "Taxes",
+  TRANSPORTATION_GAS: "Gas",
+  TRANSPORTATION_PARKING: "Parking & Tolls",
+  TRANSPORTATION_TOLLS: "Parking & Tolls",
+  TRANSPORTATION_PUBLIC_TRANSIT: "Public Transit",
+  TRANSPORTATION_TAXIS_AND_RIDE_SHARES: "Taxi & Ride Shares",
+  RENT_AND_UTILITIES_RENT: "Rent",
+  RENT_AND_UTILITIES_GAS_AND_ELECTRICITY: "Gas & Electric",
+  RENT_AND_UTILITIES_INTERNET_AND_CABLE: "Internet & Cable",
+  RENT_AND_UTILITIES_TELEPHONE: "Phone",
+  RENT_AND_UTILITIES_WATER: "Water & Garbage",
+  RENT_AND_UTILITIES_SEWAGE_AND_WASTE_MANAGEMENT: "Water & Garbage",
+};
+
+/** Plaid personal_finance_category -> app category (always one of the built-in defaults). */
 export function mapPlaidCategory(primary?: string | null, detailed?: string | null): Category {
-  const d = detailed ?? "";
-  if (primary === "FOOD_AND_DRINK" && d.includes("GROCERIES")) return "Groceries";
-  if (primary === "LOAN_PAYMENTS") {
-    // paying a card is a transfer (the purchases were already counted on the card)
-    if (d.includes("CREDIT_CARD_PAYMENT")) return "Transfer";
-    if (d.includes("MORTGAGE")) return "Housing";
-    return "Debt Payment"; // car, student, personal and other loans
-  }
-  return (primary && PFC_MAP[primary]) || "Other";
+  return (detailed && PFC_DETAILED[detailed]) || (primary && PFC_PRIMARY[primary]) || "Uncategorized";
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

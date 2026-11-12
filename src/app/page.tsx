@@ -5,7 +5,7 @@ import MerchantLogo from "@/components/MerchantLogo";
 import TxRow from "@/components/TxRow";
 import { NetWorthLine, SpendingDonut } from "@/components/charts";
 import {
-  CATEGORY_COLORS,
+  categoryColor,
   fmtUSD,
   fmtUSD0,
   monthKey,
@@ -135,7 +135,7 @@ export default function Dashboard() {
           <div className="mt-2 space-y-1.5">
             {catSpend.slice(0, 5).map((c) => (
               <div key={c.category} className="flex items-center gap-2 text-sm">
-                <span className="w-2 h-2 rounded-full" style={{ background: CATEGORY_COLORS[c.category] }} />
+                <span className="w-2 h-2 rounded-full" style={{ background: categoryColor(c.category) }} />
                 <span className="text-ink-secondary flex-1">{c.category}</span>
                 <span className="tabular">{fmtUSD0(c.total)}</span>
               </div>

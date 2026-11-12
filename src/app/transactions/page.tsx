@@ -3,28 +3,12 @@
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAppData } from "@/components/DataProvider";
+import CategorySelect from "@/components/CategorySelect";
 import TxRow from "@/components/TxRow";
 import TxEditModal from "@/components/TxEditModal";
 import { fmtUSD0 } from "@/lib/analytics";
+import { isExcludedCategory, normalizeCategory } from "@/lib/categories";
 import { Category, isTransfer, Transaction } from "@/lib/types";
-
-const CATEGORIES: (Category | "All")[] = [
-  "All",
-  "Income",
-  "Groceries",
-  "Shopping",
-  "Dining",
-  "Transport",
-  "Subscriptions",
-  "Housing",
-  "Debt Payment",
-  "Utilities",
-  "Health",
-  "Entertainment",
-  "Travel",
-  "Transfer",
-  "Other",
-];
 
 /** Money-in / money-out filter, settable via ?flow=in|out (dashboard links use this). */
 type Flow = "all" | "in" | "out";
@@ -47,7 +31,7 @@ function TransactionsInner() {
   const [query, setQuery] = useState("");
   const initialCat = params.get("cat");
   const [cat, setCat] = useState<Category | "All">(
-    initialCat && (CATEGORIES as string[]).includes(initialCat) ? (initialCat as Category) : "All"
+    initialCat ? normalizeCategory(initialCat) : "All"
   );
   const [flow, setFlow] = useState<Flow>(
     params.get("flow") === "in" ? "in" : params.get("flow") === "out" ? "out" : "all"
@@ -87,7 +71,7 @@ function TransactionsInner() {
   }
 
   // header totals leave transfers out (unless you're looking at the Transfer category itself)
-  const counted = filtered.filter((t) => !t.hidden && (cat === "Transfer" || !isTransfer(t)));
+  const counted = filtered.filter((t) => !t.hidden && (isExcludedCategory(cat) || !isTransfer(t)));
   const totalOut = counted.filter((t) => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
   const totalIn = counted.filter((t) => t.amount > 0).reduce((s, t) => s + t.amount, 0);
   const hiddenCount = data.transactions.filter((t) => t.hidden).length;
@@ -118,21 +102,12 @@ function TransactionsInner() {
           placeholder="Search merchants…"
           className="bg-surface border border-white/10 rounded-xl px-4 py-2 text-sm w-64 outline-none focus:border-series-1 placeholder:text-ink-muted"
         />
-        <div className="flex flex-wrap gap-1.5">
-          {CATEGORIES.map((c) => (
-            <button
-              key={c}
-              onClick={() => setCat(c)}
-              className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${
-                cat === c
-                  ? "bg-series-1 border-series-1 text-white font-medium"
-                  : "border-white/10 text-ink-secondary hover:border-white/25"
-              }`}
-            >
-              {c}
-            </button>
-          ))}
-        </div>
+        <CategorySelect
+          value={cat === "All" ? "" : cat}
+          onChange={(c) => setCat(c || "All")}
+          placeholder="All categories"
+          className="bg-surface border border-white/10 rounded-xl px-3 py-2 text-sm outline-none focus:border-series-1"
+        />
         <div className="flex gap-1.5">
           {(["all", "in", "out"] as Flow[]).map((f) => (
             <button

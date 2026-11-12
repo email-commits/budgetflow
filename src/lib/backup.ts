@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { gunzipSync, gzipSync } from "zlib";
 import type { PrismaClient } from "@prisma/client";
+import { ensureCategories } from "./categoryStore";
 
 /**
  * Full-database backup: every table -> JSON -> gzip -> AES-256-GCM.
@@ -28,6 +29,7 @@ export const BACKUP_TABLES = [
   "bill",
   "goal",
   "netWorthSnapshot",
+  "category",
 ] as const;
 export type BackupTable = (typeof BACKUP_TABLES)[number];
 
@@ -43,6 +45,7 @@ const DATE_FIELDS: Record<BackupTable, string[]> = {
   bill: ["createdAt"],
   goal: ["createdAt"],
   netWorthSnapshot: [],
+  category: [],
 };
 
 type Row = Record<string, unknown>;
@@ -64,6 +67,7 @@ function delegate(db: PrismaClient, table: BackupTable): AnyDelegate {
 
 /** Read every row of every table. Plaid tokens are included exactly as stored (already encrypted when ENCRYPTION_KEY is set). */
 export async function dumpDatabase(db: PrismaClient): Promise<BackupPayload> {
+  await ensureCategories(db); // the Category table creates itself on first use
   const tables = {} as Record<BackupTable, Row[]>;
   const counts = {} as Record<BackupTable, number>;
   for (const t of BACKUP_TABLES) {

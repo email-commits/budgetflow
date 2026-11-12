@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Script from "next/script";
+import CategoriesCard from "@/components/CategoriesCard";
+import CategorySelect from "@/components/CategorySelect";
 import { useAppData } from "@/components/DataProvider";
-import { CATEGORY_COLORS, fmtUSD0 } from "@/lib/analytics";
+import { categoryColor, fmtUSD0 } from "@/lib/analytics";
 import { Category, ManualAsset, Rule } from "@/lib/types";
 
 declare global {
@@ -36,29 +38,15 @@ interface BankInfo {
   lastSyncedAt?: string;
 }
 
-const RULE_CATEGORIES: Category[] = [
-  "Income",
-  "Groceries",
-  "Shopping",
-  "Dining",
-  "Transport",
-  "Subscriptions",
-  "Housing",
-  "Debt Payment",
-  "Utilities",
-  "Health",
-  "Entertainment",
-  "Travel",
-  "Transfer",
-  "Other",
-];
-
 function RulesCard({ rules, onChanged }: { rules: Rule[]; onChanged: () => Promise<void> }) {
   const [match, setMatch] = useState("");
   const [setCategory, setSetCategory] = useState<Category | "">("");
   const [renameTo, setRenameTo] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAi, setShowAi] = useState(false);
+  const aiRules = rules.filter((r) => r.source === "ai");
+  const shown = showAi ? rules : rules.filter((r) => r.source !== "ai");
 
   const add = async () => {
     setBusy(true);
@@ -99,9 +87,15 @@ function RulesCard({ rules, onChanged }: { rules: Rule[]; onChanged: () => Promi
         </p>
       </div>
 
-      {rules.length > 0 && (
+      {aiRules.length > 0 && (
+        <button onClick={() => setShowAi((v) => !v)} className="text-xs text-series-1 hover:underline">
+          {showAi ? "Hide" : "Show"} {aiRules.length} rule{aiRules.length === 1 ? "" : "s"} made by the AI review
+        </button>
+      )}
+
+      {shown.length > 0 && (
         <div className="space-y-2">
-          {rules.map((r) => (
+          {shown.map((r) => (
             <div key={r.id} className="flex items-center gap-3 bg-surface2 rounded-xl px-4 py-2.5 text-sm">
               <span className="text-ink-secondary">
                 &ldquo;<b className="text-ink-primary">{r.match}</b>&rdquo;
@@ -110,11 +104,16 @@ function RulesCard({ rules, onChanged }: { rules: Rule[]; onChanged: () => Promi
               <span className="flex items-center gap-2 flex-1 min-w-0">
                 {r.setCategory && (
                   <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full" style={{ background: CATEGORY_COLORS[r.setCategory] }} />
+                    <span className="w-2 h-2 rounded-full" style={{ background: categoryColor(r.setCategory) }} />
                     {r.setCategory}
                   </span>
                 )}
                 {r.renameTo && <span className="text-ink-secondary truncate">rename to &ldquo;{r.renameTo}&rdquo;</span>}
+                {r.source === "ai" && (
+                  <span className="text-[10px] uppercase tracking-wide text-ink-muted border border-white/20 rounded-full px-1.5 py-px">
+                    AI
+                  </span>
+                )}
               </span>
               <button onClick={() => remove(r.id)} className="text-xs text-ink-muted hover:text-critical shrink-0">
                 Delete
@@ -131,18 +130,7 @@ function RulesCard({ rules, onChanged }: { rules: Rule[]; onChanged: () => Promi
           placeholder="Merchant contains…"
           className="bg-surface2 border border-white/10 rounded-xl px-3 py-2 text-sm w-44 outline-none focus:border-series-1 placeholder:text-ink-muted"
         />
-        <select
-          value={setCategory}
-          onChange={(e) => setSetCategory(e.target.value as Category)}
-          className="bg-surface2 border border-white/10 rounded-xl px-3 py-2 text-sm outline-none"
-        >
-          <option value="">Category (optional)</option>
-          {RULE_CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+        <CategorySelect value={setCategory} onChange={(c) => setSetCategory(c)} placeholder="Category (optional)" />
         <input
           value={renameTo}
           onChange={(e) => setRenameTo(e.target.value)}
@@ -163,26 +151,70 @@ function RulesCard({ rules, onChanged }: { rules: Rule[]; onChanged: () => Promi
 }
 
 function AICard({ enabled, onChanged }: { enabled: boolean; onChanged: () => Promise<void> }) {
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<null | "unknown" | "all">(null);
   const [result, setResult] = useState<string | null>(null);
+  const [confirmAll, setConfirmAll] = useState(false);
 
-  const run = async () => {
-    setBusy(true);
+  const post = async (query: string) => {
+    const resp = await fetch(`/api/ai/categorize${query}`, { method: "POST" });
+    const json = await resp.json();
+    if (!resp.ok) throw new Error(json.error ?? "Failed");
+    return json as { created: number; examined: number; total: number; nextOffset: number; done: boolean; note?: string };
+  };
+
+  const runUnknown = async () => {
+    setBusy("unknown");
     setResult(null);
     try {
-      const resp = await fetch("/api/ai/categorize", { method: "POST" });
-      const json = await resp.json();
-      if (!resp.ok) throw new Error(json.error ?? "Failed");
+      const json = await post("");
       setResult(
         json.created > 0
-          ? `Created ${json.created} rule${json.created === 1 ? "" : "s"} from ${json.examined} uncategorized merchants. Review them below.`
+          ? `Created ${json.created} rule${json.created === 1 ? "" : "s"} from ${json.examined} uncategorized merchants.`
           : (json.note ?? "No confident matches found.")
       );
       await onChanged();
     } catch (e) {
       setResult(e instanceof Error ? e.message : "Something went wrong");
     } finally {
-      setBusy(false);
+      setBusy(null);
+    }
+  };
+
+  // full re-review: one batch per request so no single call runs long
+  const runAll = async () => {
+    if (!confirmAll) {
+      setConfirmAll(true);
+      return;
+    }
+    setConfirmAll(false);
+    setBusy("all");
+    setResult("Starting…");
+    let offset = 0;
+    let created = 0;
+    try {
+      for (;;) {
+        const json = await post(`?scope=all&offset=${offset}`);
+        created += json.created;
+        offset = json.nextOffset;
+        if (json.done) {
+          setResult(
+            json.total === 0
+              ? (json.note ?? "Nothing to review.")
+              : `Reviewed ${json.total} merchants and changed ${created}. Your own edits and rules were left alone.`
+          );
+          break;
+        }
+        setResult(`Reviewed ${offset} of ${json.total} merchants…`);
+      }
+      await onChanged();
+    } catch (e) {
+      setResult(
+        `Stopped after ${offset} merchants: ${e instanceof Error ? e.message : "something went wrong"}. ` +
+          "Changes so far are saved; run it again to start over."
+      );
+      await onChanged();
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -190,9 +222,9 @@ function AICard({ enabled, onChanged }: { enabled: boolean; onChanged: () => Pro
     <div className="card p-6 space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-medium">AI</h2>
+          <h2 className="font-medium">AI review</h2>
           <p className="text-sm text-ink-muted mt-0.5">
-            Auto-categorize unknown merchants and power the Assistant page.
+            Claude files merchants into your categories and powers the Assistant page. Your own edits and rules always win.
           </p>
         </div>
         <span
@@ -204,13 +236,23 @@ function AICard({ enabled, onChanged }: { enabled: boolean; onChanged: () => Pro
         </span>
       </div>
       {enabled ? (
-        <button
-          onClick={run}
-          disabled={busy}
-          className="bg-series-1 text-white text-sm font-medium rounded-xl px-4 py-2 disabled:opacity-50"
-        >
-          {busy ? "Categorizing…" : "Categorize unknown merchants"}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={runAll}
+            disabled={busy !== null}
+            className="bg-series-1 text-white text-sm font-medium rounded-xl px-4 py-2 disabled:opacity-50"
+            title="Re-reviews every merchant against the current category list and replaces earlier AI rules"
+          >
+            {busy === "all" ? "Reviewing…" : confirmAll ? "Replace earlier AI rules and re-review?" : "Re-review all merchants"}
+          </button>
+          <button
+            onClick={runUnknown}
+            disabled={busy !== null}
+            className="text-sm text-series-1 hover:underline disabled:opacity-50"
+          >
+            {busy === "unknown" ? "Categorizing…" : "Only uncategorized merchants"}
+          </button>
+        </div>
       ) : (
         <p className="text-sm text-ink-secondary">
           Get a key at <span className="text-series-1">console.anthropic.com</span> and add{" "}
@@ -610,6 +652,8 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      {data?.editable && data.categories && <CategoriesCard categories={data.categories} onChanged={refresh} />}
 
       {data?.editable && <AICard enabled={Boolean(data?.ai)} onChanged={refresh} />}
 

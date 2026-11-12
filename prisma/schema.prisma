@@ -139,3 +139,20 @@ model NetWorthSnapshot {
   liabilities Float // negative sum of credit+loan balances
   manual      Float
 }
+
+/// Category list: Monarch-style defaults plus your own. Created and seeded
+/// automatically on first use (see src/lib/categoryStore.ts).
+model Category {
+  name      String  @id
+  group     String
+  color     String
+  /// "expense" | "income" | "transfer"
+  kind      String  @default("expense")
+  /// left out of spending, income and budgets
+  excluded  Boolean @default(false)
+  /// not offered in pickers
+  hidden    Boolean @default(false)
+  /// created by the user (can be renamed/deleted)
+  custom    Boolean @default(false)
+  sortOrder Int     @default(0)
+}

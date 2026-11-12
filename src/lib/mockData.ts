@@ -1,3 +1,4 @@
+import { DEFAULT_CATEGORIES, registerCategories } from "./categories";
 import { Account, AppData, Budget, Category, Transaction } from "./types";
 
 // ---- deterministic PRNG (mulberry32) so demo data is stable across reloads ----
@@ -24,30 +25,30 @@ const MERCHANTS: MerchantDef[] = [
   { name: "Target", domain: "target.com", category: "Shopping", min: 18, max: 120, freq: 2.5 },
   { name: "Walmart", domain: "walmart.com", category: "Shopping", min: 15, max: 110, freq: 2 },
   { name: "Costco", domain: "costco.com", category: "Groceries", min: 60, max: 260, freq: 1.5 },
-  { name: "Best Buy", domain: "bestbuy.com", category: "Shopping", min: 25, max: 400, freq: 0.4 },
-  { name: "Apple", domain: "apple.com", category: "Shopping", min: 0.99, max: 240, freq: 0.6 },
-  { name: "Home Depot", domain: "homedepot.com", category: "Shopping", min: 14, max: 180, freq: 0.8 },
+  { name: "Best Buy", domain: "bestbuy.com", category: "Electronics", min: 25, max: 400, freq: 0.4 },
+  { name: "Apple", domain: "apple.com", category: "Electronics", min: 0.99, max: 240, freq: 0.6 },
+  { name: "Home Depot", domain: "homedepot.com", category: "Home Improvement", min: 14, max: 180, freq: 0.8 },
   { name: "Kroger", domain: "kroger.com", category: "Groceries", min: 30, max: 140, freq: 4 },
   { name: "Trader Joe's", domain: "traderjoes.com", category: "Groceries", min: 22, max: 85, freq: 2.5 },
   { name: "Whole Foods Market", domain: "wholefoodsmarket.com", category: "Groceries", min: 25, max: 110, freq: 2 },
-  { name: "Starbucks", domain: "starbucks.com", category: "Dining", min: 5, max: 16, freq: 8 },
-  { name: "Chipotle", domain: "chipotle.com", category: "Dining", min: 11, max: 28, freq: 3 },
-  { name: "McDonald's", domain: "mcdonalds.com", category: "Dining", min: 8, max: 22, freq: 2 },
-  { name: "DoorDash", domain: "doordash.com", category: "Dining", min: 22, max: 65, freq: 3.5 },
-  { name: "Chick-fil-A", domain: "chick-fil-a.com", category: "Dining", min: 9, max: 24, freq: 2 },
-  { name: "Uber", domain: "uber.com", category: "Transport", min: 9, max: 42, freq: 3 },
-  { name: "Lyft", domain: "lyft.com", category: "Transport", min: 8, max: 38, freq: 1.5 },
-  { name: "Shell", domain: "shell.com", category: "Transport", min: 32, max: 68, freq: 3 },
-  { name: "Chevron", domain: "chevron.com", category: "Transport", min: 30, max: 65, freq: 1.5 },
-  { name: "CVS Pharmacy", domain: "cvs.com", category: "Health", min: 8, max: 60, freq: 1.5 },
-  { name: "Walgreens", domain: "walgreens.com", category: "Health", min: 7, max: 45, freq: 1 },
-  { name: "AMC Theatres", domain: "amctheatres.com", category: "Entertainment", min: 14, max: 48, freq: 0.7 },
-  { name: "Steam", domain: "steampowered.com", category: "Entertainment", min: 5, max: 60, freq: 0.8 },
-  { name: "Ticketmaster", domain: "ticketmaster.com", category: "Entertainment", min: 45, max: 220, freq: 0.25 },
-  { name: "Delta Air Lines", domain: "delta.com", category: "Travel", min: 180, max: 520, freq: 0.15 },
-  { name: "Airbnb", domain: "airbnb.com", category: "Travel", min: 220, max: 700, freq: 0.12 },
-  { name: "Nike", domain: "nike.com", category: "Shopping", min: 40, max: 180, freq: 0.4 },
-  { name: "Sephora", domain: "sephora.com", category: "Shopping", min: 25, max: 120, freq: 0.5 },
+  { name: "Starbucks", domain: "starbucks.com", category: "Coffee Shops", min: 5, max: 16, freq: 8 },
+  { name: "Chipotle", domain: "chipotle.com", category: "Restaurants & Bars", min: 11, max: 28, freq: 3 },
+  { name: "McDonald's", domain: "mcdonalds.com", category: "Restaurants & Bars", min: 8, max: 22, freq: 2 },
+  { name: "DoorDash", domain: "doordash.com", category: "Restaurants & Bars", min: 22, max: 65, freq: 3.5 },
+  { name: "Chick-fil-A", domain: "chick-fil-a.com", category: "Restaurants & Bars", min: 9, max: 24, freq: 2 },
+  { name: "Uber", domain: "uber.com", category: "Taxi & Ride Shares", min: 9, max: 42, freq: 3 },
+  { name: "Lyft", domain: "lyft.com", category: "Taxi & Ride Shares", min: 8, max: 38, freq: 1.5 },
+  { name: "Shell", domain: "shell.com", category: "Gas", min: 32, max: 68, freq: 3 },
+  { name: "Chevron", domain: "chevron.com", category: "Gas", min: 30, max: 65, freq: 1.5 },
+  { name: "CVS Pharmacy", domain: "cvs.com", category: "Medical", min: 8, max: 60, freq: 1.5 },
+  { name: "Walgreens", domain: "walgreens.com", category: "Medical", min: 7, max: 45, freq: 1 },
+  { name: "AMC Theatres", domain: "amctheatres.com", category: "Entertainment & Recreation", min: 14, max: 48, freq: 0.7 },
+  { name: "Steam", domain: "steampowered.com", category: "Entertainment & Recreation", min: 5, max: 60, freq: 0.8 },
+  { name: "Ticketmaster", domain: "ticketmaster.com", category: "Entertainment & Recreation", min: 45, max: 220, freq: 0.25 },
+  { name: "Delta Air Lines", domain: "delta.com", category: "Travel & Vacation", min: 180, max: 520, freq: 0.15 },
+  { name: "Airbnb", domain: "airbnb.com", category: "Travel & Vacation", min: 220, max: 700, freq: 0.12 },
+  { name: "Nike", domain: "nike.com", category: "Clothing", min: 40, max: 180, freq: 0.4 },
+  { name: "Sephora", domain: "sephora.com", category: "Personal Care", min: 25, max: 120, freq: 0.5 },
   { name: "Etsy", domain: "etsy.com", category: "Shopping", min: 12, max: 80, freq: 0.5 },
   { name: "REI", domain: "rei.com", category: "Shopping", min: 30, max: 250, freq: 0.25 },
 ];
@@ -65,15 +66,15 @@ const RECURRING: RecurringDef[] = [
   { name: "Spotify", domain: "spotify.com", category: "Subscriptions", amount: 11.99, dayOfMonth: 7 },
   { name: "iCloud", domain: "apple.com", category: "Subscriptions", amount: 2.99, dayOfMonth: 12 },
   { name: "YouTube Premium", domain: "youtube.com", category: "Subscriptions", amount: 13.99, dayOfMonth: 15 },
-  { name: "Planet Fitness", domain: "planetfitness.com", category: "Health", amount: 24.99, dayOfMonth: 17 },
+  { name: "Planet Fitness", domain: "planetfitness.com", category: "Fitness", amount: 24.99, dayOfMonth: 17 },
   { name: "Adobe Creative Cloud", domain: "adobe.com", category: "Subscriptions", amount: 59.99, dayOfMonth: 21 },
   { name: "OpenAI ChatGPT", domain: "openai.com", category: "Subscriptions", amount: 20.0, dayOfMonth: 9 },
-  { name: "Sunrise Apartments Rent", domain: "", category: "Housing", amount: 1850, dayOfMonth: 1 },
-  { name: "ComEd Electric", domain: "comed.com", category: "Utilities", amount: 96, dayOfMonth: 14 },
-  { name: "Xfinity Internet", domain: "xfinity.com", category: "Utilities", amount: 79.99, dayOfMonth: 19 },
-  { name: "AT&T Wireless", domain: "att.com", category: "Utilities", amount: 85.5, dayOfMonth: 23 },
-  { name: "Geico Auto Insurance", domain: "geico.com", category: "Transport", amount: 142.3, dayOfMonth: 26 },
-  { name: "Toyota Financial Auto Loan", domain: "toyotafinancial.com", category: "Debt Payment", amount: 412.18, dayOfMonth: 11 },
+  { name: "Sunrise Apartments Rent", domain: "", category: "Rent", amount: 1850, dayOfMonth: 1 },
+  { name: "ComEd Electric", domain: "comed.com", category: "Gas & Electric", amount: 96, dayOfMonth: 14 },
+  { name: "Xfinity Internet", domain: "xfinity.com", category: "Internet & Cable", amount: 79.99, dayOfMonth: 19 },
+  { name: "AT&T Wireless", domain: "att.com", category: "Phone", amount: 85.5, dayOfMonth: 23 },
+  { name: "Geico Auto Insurance", domain: "geico.com", category: "Insurance", amount: 142.3, dayOfMonth: 26 },
+  { name: "Toyota Financial Auto Loan", domain: "toyotafinancial.com", category: "Auto Payment", amount: 412.18, dayOfMonth: 11 },
 ];
 
 export const ACCOUNTS: Account[] = [
@@ -85,13 +86,13 @@ export const ACCOUNTS: Account[] = [
 
 export const BUDGETS: Budget[] = [
   { category: "Groceries", monthlyLimit: 700 },
-  { category: "Dining", monthlyLimit: 450 },
+  { category: "Restaurants & Bars", monthlyLimit: 450 },
   { category: "Shopping", monthlyLimit: 600 },
-  { category: "Transport", monthlyLimit: 400 },
+  { category: "Gas", monthlyLimit: 250 },
   { category: "Subscriptions", monthlyLimit: 150 },
-  { category: "Entertainment", monthlyLimit: 150 },
-  { category: "Utilities", monthlyLimit: 300 },
-  { category: "Health", monthlyLimit: 150 },
+  { category: "Entertainment & Recreation", monthlyLimit: 150 },
+  { category: "Gas & Electric", monthlyLimit: 150 },
+  { category: "Medical", monthlyLimit: 150 },
 ];
 
 function iso(d: Date): string {
@@ -120,7 +121,7 @@ export function generateDemoData(today = new Date()): AppData {
         date: iso(d),
         merchant: "Acme Corp Payroll",
         merchantDomain: "",
-        category: "Income",
+        category: "Paychecks",
         amount: 3120.55,
       });
     }
@@ -132,7 +133,7 @@ export function generateDemoData(today = new Date()): AppData {
         date: iso(d),
         merchant: "Transfer to Savings",
         merchantDomain: "",
-        category: "Other",
+        category: "Transfer",
         amount: -800,
       });
     }
@@ -145,7 +146,7 @@ export function generateDemoData(today = new Date()): AppData {
         date: iso(d),
         merchant: "Chase Card Payment",
         merchantDomain: "chase.com",
-        category: "Transfer",
+        category: "Credit Card Payment",
         amount: -1500,
       });
       txs.push({
@@ -154,7 +155,7 @@ export function generateDemoData(today = new Date()): AppData {
         date: iso(d),
         merchant: "Payment Thank You",
         merchantDomain: "chase.com",
-        category: "Transfer",
+        category: "Credit Card Payment",
         amount: 1500,
       });
     }
@@ -162,10 +163,10 @@ export function generateDemoData(today = new Date()): AppData {
     // recurring bills
     for (const r of RECURRING) {
       if (day === r.dayOfMonth) {
-        const jitter = r.amount > 90 && r.category === "Utilities" ? (rand() - 0.5) * 18 : 0;
+        const jitter = r.amount > 90 && r.category === "Gas & Electric" ? (rand() - 0.5) * 18 : 0;
         txs.push({
           id: `tx_${id++}`,
-          accountId: r.amount > 500 || r.category === "Debt Payment" ? "acc_chk" : "acc_cc",
+          accountId: r.amount > 500 || r.category === "Auto Payment" ? "acc_chk" : "acc_cc",
           date: iso(d),
           merchant: r.name,
           merchantDomain: r.domain || undefined,
@@ -178,7 +179,7 @@ export function generateDemoData(today = new Date()): AppData {
     // everyday merchants — probability per day from freq/30, weekend boost for dining/shopping
     for (const m of MERCHANTS) {
       let p = m.freq / 30;
-      if ((dow === 0 || dow === 6) && (m.category === "Dining" || m.category === "Shopping" || m.category === "Entertainment")) {
+      if ((dow === 0 || dow === 6) && (m.category === "Restaurants & Bars" || m.category === "Shopping" || m.category === "Entertainment & Recreation")) {
         p *= 1.8;
       }
       if (rand() < p) {
@@ -202,5 +203,6 @@ export function generateDemoData(today = new Date()): AppData {
 
   txs.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
-  return { mode: "demo", accounts: ACCOUNTS, transactions: txs, budgets: BUDGETS };
+  registerCategories(DEFAULT_CATEGORIES);
+  return { mode: "demo", accounts: ACCOUNTS, transactions: txs, budgets: BUDGETS, categories: DEFAULT_CATEGORIES };
 }

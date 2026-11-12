@@ -1,21 +1,6 @@
 import { Category, isTransfer, RecurringItem, Transaction } from "./types";
 
-export const CATEGORY_COLORS: Record<Category, string> = {
-  Income: "#008300",
-  Groceries: "#199e70",
-  Shopping: "#3987e5",
-  Dining: "#c98500",
-  Transport: "#9085e9",
-  Subscriptions: "#d55181",
-  Housing: "#d95926",
-  "Debt Payment": "#b8405e",
-  Utilities: "#e66767",
-  Health: "#0ca30c",
-  Entertainment: "#86b6ef",
-  Travel: "#1baf7a",
-  Transfer: "#6b7280",
-  Other: "#898781",
-};
+export { categoryColor } from "./categories";
 
 export const fmtUSD = (n: number, digits = 2) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: digits, maximumFractionDigits: digits });

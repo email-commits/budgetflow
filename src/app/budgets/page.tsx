@@ -1,24 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import CategorySelect from "@/components/CategorySelect";
+import { groupCategories } from "@/lib/categories";
 import { useAppData } from "@/components/DataProvider";
-import { CATEGORY_COLORS, fmtUSD0, monthKey, spendByCategory } from "@/lib/analytics";
+import { categoryColor, fmtUSD0, monthKey, spendByCategory } from "@/lib/analytics";
 import { Budget, Category } from "@/lib/types";
-
-const ALL_CATEGORIES: Category[] = [
-  "Groceries",
-  "Shopping",
-  "Dining",
-  "Transport",
-  "Subscriptions",
-  "Housing",
-  "Debt Payment",
-  "Utilities",
-  "Health",
-  "Entertainment",
-  "Travel",
-  "Other",
-];
 
 function prevMonthKey(key: string): string {
   const [y, m] = key.split("-").map(Number);
@@ -101,7 +88,9 @@ export default function BudgetsPage() {
     }
   };
 
-  const unbudgeted = ALL_CATEGORIES.filter((c) => !data.budgets.some((b) => b.category === c));
+  const unbudgeted = groupCategories(data.categories ?? [], { budgetable: true })
+    .flatMap((g) => g.items.map((c) => c.name))
+    .filter((c) => !data.budgets.some((b) => b.category === c));
 
   return (
     <div className="space-y-6">
@@ -117,18 +106,14 @@ export default function BudgetsPage() {
           <div className="flex items-center gap-2">
             {adding ? (
               <>
-                <select
+                <CategorySelect
                   value={newCat}
-                  onChange={(e) => setNewCat(e.target.value as Category)}
+                  onChange={(c) => setNewCat(c)}
+                  placeholder="Pick category…"
+                  budgetable
+                  exclude={data.budgets.map((b) => b.category)}
                   className="bg-surface border border-white/10 rounded-xl px-3 py-2 text-sm outline-none"
-                >
-                  <option value="">Pick category…</option>
-                  {unbudgeted.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
+                />
                 <button
                   onClick={addBudget}
                   disabled={!newCat || busy}
@@ -170,14 +155,14 @@ export default function BudgetsPage() {
           const pct = effectiveLimit > 0 ? (spent / effectiveLimit) * 100 : 100;
           const over = pct > 100;
           const near = pct > 85 && !over;
-          const color = over ? "#d03b3b" : near ? "#fab219" : CATEGORY_COLORS[b.category];
+          const color = over ? "#d03b3b" : near ? "#fab219" : categoryColor(b.category);
           const isEditing = editingCat === b.category;
 
           return (
             <div key={b.category} className="card p-5">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: CATEGORY_COLORS[b.category] }} />
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: categoryColor(b.category) }} />
                   <span className="text-sm font-medium">{b.category}</span>
                   {b.rollover && (
                     <span className="text-[10px] uppercase tracking-wide text-ink-muted border border-white/20 rounded-full px-1.5 py-px">

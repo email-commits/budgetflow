@@ -1,6 +1,6 @@
 "use client";
 
-import { CATEGORY_COLORS, fmtUSD } from "@/lib/analytics";
+import { categoryColor, fmtUSD } from "@/lib/analytics";
 import { Account, paymentKind, Transaction } from "@/lib/types";
 import MerchantLogo from "./MerchantLogo";
 
@@ -42,7 +42,7 @@ export default function TxRow({
         <div className="text-xs text-ink-muted flex items-center gap-1.5">
           <span
             className="inline-block w-1.5 h-1.5 rounded-full"
-            style={{ background: CATEGORY_COLORS[tx.category] }}
+            style={{ background: categoryColor(tx.category) }}
           />
           {tx.category}
           {kind && account && (

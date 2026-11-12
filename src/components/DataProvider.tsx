@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
+import { CategoryDef, DEFAULT_CATEGORIES, registerCategories } from "@/lib/categories";
 import { AppData } from "@/lib/types";
 
 interface Ctx {
@@ -19,7 +20,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       const resp = await fetch("/api/data");
-      setData(await resp.json());
+      const json: AppData = await resp.json();
+      // colours, groups and "excluded" flags are looked up by name everywhere
+      registerCategories(json.categories);
+      setData(json);
     } finally {
       setLoading(false);
     }
@@ -34,4 +38,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
 export function useAppData() {
   return useContext(DataContext);
+}
+
+/** The live category list (defaults + custom). */
+export function useCategories(): CategoryDef[] {
+  return useContext(DataContext).data?.categories ?? DEFAULT_CATEGORIES;
 }
