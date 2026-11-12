@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
  * Body: { category?: string | null, merchant?: string | null, hidden?: boolean }
  * Passing null for category/merchant clears the override (reverts to rule/Plaid value).
  */
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   if (!dbConfigured()) {
     return NextResponse.json({ error: "Editing requires a database (set DATABASE_URL)." }, { status: 400 });
   }
@@ -22,7 +23,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
     }
     const db = getDb();
-    await db.transaction.update({ where: { id: params.id }, data });
+    await db.transaction.update({ where: { id }, data });
     return NextResponse.json({ ok: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "update failed";

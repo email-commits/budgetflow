@@ -51,6 +51,37 @@ Linked access tokens are stored in `.plaid-store.json` (dev-only convenience —
 
 The digest includes: total spend vs. last week, income, net worth, category breakdown, five biggest purchases, and recurring charges due in the next 7 days.
 
+## Nightly encrypted backup
+
+The database is the only copy of your history (Plaid only backfills about two
+years), so `/api/backup` runs once a day from Vercel Cron: it dumps every table,
+encrypts the dump with `BACKUP_KEY` (AES-256-GCM, key derived with scrypt) and
+emails the file to `BACKUP_TO` (defaults to `DIGEST_TO`). The email body lists
+row counts only.
+
+Setup (Vercel -> Settings -> Environment Variables, then redeploy):
+
+- `CRON_SECRET` — `openssl rand -hex 32`
+- `BACKUP_KEY` — `openssl rand -base64 32`. **Save it in a password manager.**
+  Without it the backups cannot be opened.
+
+The route refuses to run unless both are set. Test it without waiting for the cron:
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" "https://your-app.vercel.app/api/backup?download=1" -o test.bfbk
+```
+
+Open or restore a backup (put `BACKUP_KEY` in `.env.local` or the environment):
+
+```bash
+npm run backup:decrypt -- budgetflow-backup-2026-11-12.bfbk   # writes readable JSON
+npm run backup:restore -- budgetflow-backup-2026-11-12.bfbk   # loads into DATABASE_URL
+```
+
+Restore needs an empty database with the tables created (`npm run db:push`).
+Restored Plaid tokens only work with the same `ENCRYPTION_KEY` the app had when
+the backup was taken — keep that key in the password manager too.
+
 ## Database (Phase 0)
 
 With `DATABASE_URL` set (free Postgres from https://neon.tech), the app upgrades to:
@@ -64,7 +95,7 @@ Setup: create a Neon project → copy the connection string → add `DATABASE_UR
 
 ## Stack
 
-- Next.js 14 (App Router) + TypeScript
+- Next.js 16 (App Router) + TypeScript
 - Tailwind CSS (dark, Copilot-inspired theme)
 - Recharts for charts
 - Plaid Node SDK (`transactions/sync` + enrichment fields)
