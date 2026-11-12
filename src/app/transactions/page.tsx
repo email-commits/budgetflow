@@ -6,7 +6,7 @@ import { useAppData } from "@/components/DataProvider";
 import TxRow from "@/components/TxRow";
 import TxEditModal from "@/components/TxEditModal";
 import { fmtUSD0 } from "@/lib/analytics";
-import { Category, Transaction } from "@/lib/types";
+import { Category, isTransfer, Transaction } from "@/lib/types";
 
 const CATEGORIES: (Category | "All")[] = [
   "All",
@@ -17,10 +17,12 @@ const CATEGORIES: (Category | "All")[] = [
   "Transport",
   "Subscriptions",
   "Housing",
+  "Debt Payment",
   "Utilities",
   "Health",
   "Entertainment",
   "Travel",
+  "Transfer",
   "Other",
 ];
 
@@ -78,12 +80,16 @@ function TransactionsInner() {
     return [...map.entries()];
   }, [filtered]);
 
+  const accountById = useMemo(() => new Map((data?.accounts ?? []).map((a) => [a.id, a])), [data]);
+
   if (loading || !data) {
     return <div className="text-ink-muted text-sm animate-pulse py-20 text-center">Loading…</div>;
   }
 
-  const totalOut = filtered.filter((t) => t.amount < 0 && !t.hidden).reduce((s, t) => s + Math.abs(t.amount), 0);
-  const totalIn = filtered.filter((t) => t.amount > 0 && !t.hidden).reduce((s, t) => s + t.amount, 0);
+  // header totals leave transfers out (unless you're looking at the Transfer category itself)
+  const counted = filtered.filter((t) => !t.hidden && (cat === "Transfer" || !isTransfer(t)));
+  const totalOut = counted.filter((t) => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+  const totalIn = counted.filter((t) => t.amount > 0).reduce((s, t) => s + t.amount, 0);
   const hiddenCount = data.transactions.filter((t) => t.hidden).length;
   const scopeLabel = [month && monthTitle(month), flow === "in" ? "money in" : flow === "out" ? "money out" : null]
     .filter(Boolean)
@@ -176,7 +182,12 @@ function TransactionsInner() {
               })}
             </div>
             {txs.map((t) => (
-              <TxRow key={t.id} tx={t} onClick={data.editable ? () => setEditing(t) : undefined} />
+              <TxRow
+                key={t.id}
+                tx={t}
+                account={accountById.get(t.accountId)}
+                onClick={data.editable ? () => setEditing(t) : undefined}
+              />
             ))}
           </div>
         ))}

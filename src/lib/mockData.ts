@@ -73,6 +73,7 @@ const RECURRING: RecurringDef[] = [
   { name: "Xfinity Internet", domain: "xfinity.com", category: "Utilities", amount: 79.99, dayOfMonth: 19 },
   { name: "AT&T Wireless", domain: "att.com", category: "Utilities", amount: 85.5, dayOfMonth: 23 },
   { name: "Geico Auto Insurance", domain: "geico.com", category: "Transport", amount: 142.3, dayOfMonth: 26 },
+  { name: "Toyota Financial Auto Loan", domain: "toyotafinancial.com", category: "Debt Payment", amount: 412.18, dayOfMonth: 11 },
 ];
 
 export const ACCOUNTS: Account[] = [
@@ -136,13 +137,35 @@ export function generateDemoData(today = new Date()): AppData {
       });
     }
 
+    // credit card paid from checking on the 25th — a transfer, shows on both accounts
+    if (day === 25) {
+      txs.push({
+        id: `tx_${id++}`,
+        accountId: "acc_chk",
+        date: iso(d),
+        merchant: "Chase Card Payment",
+        merchantDomain: "chase.com",
+        category: "Transfer",
+        amount: -1500,
+      });
+      txs.push({
+        id: `tx_${id++}`,
+        accountId: "acc_cc",
+        date: iso(d),
+        merchant: "Payment Thank You",
+        merchantDomain: "chase.com",
+        category: "Transfer",
+        amount: 1500,
+      });
+    }
+
     // recurring bills
     for (const r of RECURRING) {
       if (day === r.dayOfMonth) {
         const jitter = r.amount > 90 && r.category === "Utilities" ? (rand() - 0.5) * 18 : 0;
         txs.push({
           id: `tx_${id++}`,
-          accountId: r.amount > 500 ? "acc_chk" : "acc_cc",
+          accountId: r.amount > 500 || r.category === "Debt Payment" ? "acc_chk" : "acc_cc",
           date: iso(d),
           merchant: r.name,
           merchantDomain: r.domain || undefined,

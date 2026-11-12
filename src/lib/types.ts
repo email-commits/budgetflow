@@ -6,11 +6,24 @@ export type Category =
   | "Transport"
   | "Subscriptions"
   | "Housing"
+  | "Debt Payment"
   | "Utilities"
   | "Health"
   | "Entertainment"
   | "Travel"
+  | "Transfer"
   | "Other";
+
+/**
+ * Money moving between your own accounts — most importantly paying a credit
+ * card from checking. The purchases were already counted when they hit the
+ * card, so transfers are left out of spending, income, budgets and reviews
+ * (same approach as Monarch and Copilot). Loan payments are NOT transfers:
+ * they are real money out and live in "Debt Payment".
+ */
+export function isTransfer(t: { category: string; merchant: string }): boolean {
+  return t.category === "Transfer" || (t.category === "Other" && t.merchant.toLowerCase().includes("transfer"));
+}
 
 export interface Account {
   id: string;
@@ -20,6 +33,22 @@ export interface Account {
   type: "checking" | "savings" | "credit" | "investment" | "loan";
   mask: string;
   balance: number; // positive = asset, negative = liability
+}
+
+/** How a transaction was paid, derived from the account it posted to. */
+export type PaymentKind = "Credit card" | "Debit" | "Investment" | "Loan";
+
+export function paymentKind(account: Pick<Account, "type">): PaymentKind {
+  switch (account.type) {
+    case "credit":
+      return "Credit card";
+    case "investment":
+      return "Investment";
+    case "loan":
+      return "Loan";
+    default:
+      return "Debit"; // checking & savings: money straight out of the bank account
+  }
 }
 
 export interface Transaction {

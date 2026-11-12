@@ -2,7 +2,7 @@ import { PlaidApi } from "plaid";
 import { PrismaClient } from "@prisma/client";
 import { getDb } from "./db";
 import { decryptToken, encryptToken, encryptionEnabled, isEncrypted } from "./crypto";
-import { getPlaidClient, mapPlaidAccount, mapPlaidTransaction, plaidConfigured, readStore } from "./plaid";
+import { getPlaidClient, mapPlaidAccount, mapPlaidCategory, mapPlaidTransaction, plaidConfigured, readStore } from "./plaid";
 
 const STALE_AFTER_MS = 15 * 60 * 1000; // re-sync at most every 15 minutes
 
@@ -253,4 +253,65 @@ export async function syncAll(force = false): Promise<{ synced: number; skipped:
     }
   }
   return { synced, skipped, errors };
+}
+
+/** The slice of the Plaid client that recategorizing needs (lets tests pass a fake). */
+export type TransactionsSyncClient = Pick<PlaidApi, "transactionsSync">;
+
+/**
+ * Re-apply the current category mapping to transactions already in the database.
+ *
+ * Categories are assigned once, when a transaction is first synced, so a change
+ * to the mapping (e.g. the new "Debt Payment" / "Transfer" categories) does not
+ * reach old rows by itself. This replays each bank's history from Plaid — from
+ * the beginning, WITHOUT touching the saved sync cursor — and updates only the
+ * stored Plaid category. Your own edits (categoryOverride) and rules are separate
+ * columns and are never changed; no rows are added or deleted.
+ */
+export async function recategorizeItem(
+  db: PrismaClient,
+  client: TransactionsSyncClient,
+  accessToken: string
+): Promise<number> {
+  let updated = 0;
+  let cursor: string | undefined;
+  let hasMore = true;
+  while (hasMore) {
+    const resp = await client.transactionsSync({ access_token: accessToken, cursor, count: 500 });
+    const byCategory = new Map<string, string[]>();
+    for (const t of [...resp.data.added, ...resp.data.modified]) {
+      const category = mapPlaidCategory(t.personal_finance_category?.primary, t.personal_finance_category?.detailed);
+      if (!byCategory.has(category)) byCategory.set(category, []);
+      byCategory.get(category)!.push(t.transaction_id);
+    }
+    for (const [category, ids] of byCategory) {
+      const res = await db.transaction.updateMany({
+        where: { id: { in: ids }, category: { not: category } },
+        data: { category },
+      });
+      updated += res.count;
+    }
+    cursor = resp.data.next_cursor;
+    hasMore = resp.data.has_more;
+  }
+  return updated;
+}
+
+/** Recategorize every linked bank. Returns how many transactions changed category. */
+export async function recategorizeAll(): Promise<{ updated: number; errors: number }> {
+  if (!plaidConfigured()) return { updated: 0, errors: 0 };
+  const db = getDb();
+  const client = getPlaidClient();
+  const items = await db.plaidItem.findMany();
+  let updated = 0,
+    errors = 0;
+  for (const item of items) {
+    try {
+      updated += await recategorizeItem(db, client, decryptToken(item.accessToken));
+    } catch (e) {
+      errors++;
+      console.error(`Recategorize failed for item ${item.id}:`, e);
+    }
+  }
+  return { updated, errors };
 }

@@ -21,7 +21,7 @@ export function detectAnomalies(txs: Transaction[], windowDays = 14, now = new D
   cutoff.setDate(cutoff.getDate() - windowDays);
   const cutoffIso = cutoff.toISOString().slice(0, 10);
 
-  const visible = txs.filter((t) => !t.hidden && t.amount < 0 && !t.merchant.toLowerCase().includes("transfer"));
+  const visible = txs.filter((t) => !t.hidden && t.amount < 0 && t.category !== "Transfer" && !t.merchant.toLowerCase().includes("transfer"));
   const recent = visible.filter((t) => t.date >= cutoffIso);
   const historical = visible.filter((t) => t.date < cutoffIso);
 

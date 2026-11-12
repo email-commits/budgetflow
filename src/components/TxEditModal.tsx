@@ -13,10 +13,12 @@ const CATEGORIES: Category[] = [
   "Transport",
   "Subscriptions",
   "Housing",
+  "Debt Payment",
   "Utilities",
   "Health",
   "Entertainment",
   "Travel",
+  "Transfer",
   "Other",
 ];
 

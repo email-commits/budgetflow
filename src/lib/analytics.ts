@@ -1,4 +1,4 @@
-import { Category, RecurringItem, Transaction } from "./types";
+import { Category, isTransfer, RecurringItem, Transaction } from "./types";
 
 export const CATEGORY_COLORS: Record<Category, string> = {
   Income: "#008300",
@@ -8,10 +8,12 @@ export const CATEGORY_COLORS: Record<Category, string> = {
   Transport: "#9085e9",
   Subscriptions: "#d55181",
   Housing: "#d95926",
+  "Debt Payment": "#b8405e",
   Utilities: "#e66767",
   Health: "#0ca30c",
   Entertainment: "#86b6ef",
   Travel: "#1baf7a",
+  Transfer: "#6b7280",
   Other: "#898781",
 };
 
@@ -34,7 +36,7 @@ export function spendByCategory(txs: Transaction[], key: string): { category: Ca
   for (const t of txs) {
     if (t.hidden) continue;
     if (!inMonth(t, key) || t.amount >= 0) continue;
-    if (t.category === "Other" && t.merchant.toLowerCase().includes("transfer")) continue;
+    if (isTransfer(t)) continue;
     map.set(t.category, (map.get(t.category) ?? 0) + Math.abs(t.amount));
   }
   return [...map.entries()]
@@ -47,7 +49,7 @@ export function monthlyCashFlow(txs: Transaction[]): { month: string; income: nu
   const map = new Map<string, { income: number; spend: number }>();
   for (const t of txs) {
     if (t.hidden) continue;
-    if (t.category === "Other" && t.merchant.toLowerCase().includes("transfer")) continue;
+    if (isTransfer(t)) continue;
     const k = monthKey(t.date);
     const e = map.get(k) ?? { income: 0, spend: 0 };
     if (t.amount > 0) e.income += t.amount;
