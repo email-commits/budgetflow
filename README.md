@@ -51,6 +51,25 @@ Linked access tokens are stored in `.plaid-store.json` (dev-only convenience —
 
 The digest includes: total spend vs. last week, income, net worth, category breakdown, five biggest purchases, and recurring charges due in the next 7 days.
 
+## Categories
+
+Categories are data, not code. The app starts with a Monarch-style list (about 50
+categories in groups such as Food & Dining, Auto & Transport, Financial) and you
+can add your own in **Settings → Categories**: pick a group or make a new one,
+recolour, hide the ones you don't use, or mark a category *excluded* so it is left
+out of spending, income and budgets (transfers and credit card payments always are).
+Built-in categories can be hidden but not renamed or deleted; your own can be both.
+
+The `Category` table creates and seeds itself on first use, so there is no
+migration step. Three things keep transactions filed:
+
+1. **Plaid's detailed category** decides the starting category at sync time.
+   After changing the mapping, run **Settings → Re-apply categories** once.
+2. **Rules** (merchant contains X → category). Your rules beat AI rules.
+3. **AI review** (**Settings → AI review → Re-review all merchants**) asks Claude to
+   file every merchant against the current list and saves the result as AI rules.
+   It replaces earlier AI rules and never touches your own edits or rules.
+
 ## Nightly encrypted backup
 
 The database is the only copy of your history (Plaid only backfills about two

@@ -1,28 +1,20 @@
-export type Category =
-  | "Income"
-  | "Groceries"
-  | "Shopping"
-  | "Dining"
-  | "Transport"
-  | "Subscriptions"
-  | "Housing"
-  | "Debt Payment"
-  | "Utilities"
-  | "Health"
-  | "Entertainment"
-  | "Travel"
-  | "Transfer"
-  | "Other";
+import { CategoryDef, isExcludedCategory, UNCATEGORIZED } from "./categories";
+
+/** A category name. The list is data (see categories.ts) — defaults plus your own. */
+export type Category = string;
 
 /**
- * Money moving between your own accounts — most importantly paying a credit
- * card from checking. The purchases were already counted when they hit the
- * card, so transfers are left out of spending, income, budgets and reviews
- * (same approach as Monarch and Copilot). Loan payments are NOT transfers:
- * they are real money out and live in "Debt Payment".
+ * Money that is not spending or income: anything in an excluded category
+ * (transfers such as paying a credit card from checking, plus any category you
+ * mark as excluded). Card purchases were already counted when they hit the
+ * card, so the payment is left out — same approach as Monarch and Copilot.
+ * Loan payments are NOT transfers: they are real money out.
  */
 export function isTransfer(t: { category: string; merchant: string }): boolean {
-  return t.category === "Transfer" || (t.category === "Other" && t.merchant.toLowerCase().includes("transfer"));
+  return (
+    isExcludedCategory(t.category) ||
+    ((t.category === UNCATEGORIZED || t.category === "Other") && t.merchant.toLowerCase().includes("transfer"))
+  );
 }
 
 export interface Account {
@@ -76,6 +68,8 @@ export interface Rule {
   match: string;
   setCategory?: Category;
   renameTo?: string;
+  /** "user" (made by hand) or "ai" (AI review) — user rules win */
+  source?: "user" | "ai";
 }
 
 export interface Budget {
@@ -143,6 +137,8 @@ export interface AppData {
   accounts: Account[];
   transactions: Transaction[];
   budgets: Budget[];
+  /** the category list (defaults + custom); absent only on very old cached data */
+  categories?: CategoryDef[];
   rules?: Rule[];
   holdings?: Holding[];
   manualAssets?: ManualAsset[];

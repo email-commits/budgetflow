@@ -14,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { CATEGORY_COLORS, fmtUSD0, monthLabel } from "@/lib/analytics";
+import { categoryColor, fmtUSD0, monthLabel } from "@/lib/analytics";
 import { Category } from "@/lib/types";
 
 const AXIS = { stroke: "#383835", fontSize: 12, fill: "#898781" };
@@ -172,7 +172,7 @@ export function SpendingDonut({
             isAnimationActive={false}
           >
             {data.map((d) => (
-              <Cell key={d.category} fill={CATEGORY_COLORS[d.category]} />
+              <Cell key={d.category} fill={categoryColor(d.category)} />
             ))}
           </Pie>
           <Tooltip contentStyle={tooltipStyle} formatter={(v, name) => [fmtUSD0(Number(v)), String(name)]} />

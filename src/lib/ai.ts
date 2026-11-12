@@ -19,7 +19,9 @@ export async function askClaude(opts: {
   messages: ChatMessage[];
   maxTokens?: number;
 }): Promise<string> {
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+  // ANTHROPIC_BASE_URL exists so tests can point this at a local stand-in
+  const base = (process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com").replace(/\/+$/, "");
+  const resp = await fetch(`${base}/v1/messages`, {
     method: "POST",
     headers: {
       "x-api-key": process.env.ANTHROPIC_API_KEY!,

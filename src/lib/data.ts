@@ -1,5 +1,7 @@
 import { generateDemoData, BUDGETS } from "./mockData";
 import { aiEnabled } from "./ai";
+import { DEFAULT_CATEGORIES, normalizeCategory, registerCategories } from "./categories";
+import { loadCategories } from "./categoryStore";
 import { dbConfigured, getDb } from "./db";
 import { syncAll } from "./sync";
 import {
@@ -10,7 +12,7 @@ import {
   plaidConfigured,
   readStore,
 } from "./plaid";
-import { Account, AppData, Budget, Category, Rule, Transaction } from "./types";
+import { Account, AppData, Budget, Rule, Transaction } from "./types";
 
 /**
  * Fetch app data.
@@ -50,12 +52,19 @@ async function getAppDataFromDb(force: boolean): Promise<AppData> {
 
   if (itemCount === 0) return generateDemoData();
 
-  const rules: Rule[] = ruleRows.map((r) => ({
-    id: r.id,
-    match: r.match,
-    setCategory: (r.setCategory as Category) ?? undefined,
-    renameTo: r.renameTo ?? undefined,
-  }));
+  // category list first: everything below is expressed in its names
+  const categories = await loadCategories(db);
+
+  // rules made by hand come before AI rules, so yours always win
+  const rules: Rule[] = ruleRows
+    .map((r) => ({
+      id: r.id,
+      match: r.match,
+      setCategory: r.setCategory ? normalizeCategory(r.setCategory) : undefined,
+      renameTo: r.renameTo ?? undefined,
+      source: (r.source === "ai" ? "ai" : "user") as "ai" | "user",
+    }))
+    .sort((a, b) => (a.source === b.source ? 0 : a.source === "user" ? -1 : 1));
 
   // budgets live in the DB (seeded from defaults on first run)
   let budgetRows = await db.budget.findMany();
@@ -64,7 +73,7 @@ async function getAppDataFromDb(force: boolean): Promise<AppData> {
     budgetRows = await db.budget.findMany();
   }
   const budgets: Budget[] = budgetRows.map((b) => ({
-    category: b.category as Category,
+    category: normalizeCategory(b.category),
     monthlyLimit: b.monthlyLimit,
     rollover: b.rollover || undefined,
   }));
@@ -72,6 +81,7 @@ async function getAppDataFromDb(force: boolean): Promise<AppData> {
   return {
     mode: "plaid",
     editable: true,
+    categories,
     rules,
     holdings: holdingRows.map((h) => ({
       id: h.id,
@@ -144,8 +154,9 @@ interface DbTransaction {
 function applyEdits(t: DbTransaction, rules: Rule[]): Transaction {
   const rule = rules.find((r) => t.merchant.toLowerCase().includes(r.match.toLowerCase()));
   const merchant = t.merchantOverride ?? rule?.renameTo ?? t.merchant;
-  const category = (t.categoryOverride as Category) ?? rule?.setCategory ?? (t.category as Category);
-  const edited = merchant !== t.merchant || category !== t.category;
+  const original = normalizeCategory(t.category);
+  const category = t.categoryOverride ? normalizeCategory(t.categoryOverride) : (rule?.setCategory ?? original);
+  const edited = merchant !== t.merchant || category !== original;
   return {
     id: t.id,
     accountId: t.accountId,
@@ -207,7 +218,8 @@ async function getAppDataLegacy(): Promise<AppData> {
     }
 
     transactions.sort((a, b) => (a.date < b.date ? 1 : -1));
-    return { mode: "plaid", accounts, transactions, budgets: BUDGETS };
+    registerCategories(DEFAULT_CATEGORIES);
+    return { mode: "plaid", accounts, transactions, budgets: BUDGETS, categories: DEFAULT_CATEGORIES };
   } catch (e) {
     console.error("Plaid fetch failed, serving demo data:", e);
     return generateDemoData();

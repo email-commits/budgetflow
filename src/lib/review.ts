@@ -1,3 +1,4 @@
+import { isExcludedCategory } from "./categories";
 import { spendByCategory } from "./analytics";
 import { AppData, Budget, Category, Transaction } from "./types";
 
@@ -16,7 +17,7 @@ export interface MonthlyReview {
 }
 
 function isTransfer(t: Transaction): boolean {
-  return t.hidden === true || t.category === "Transfer" || t.merchant.toLowerCase().includes("transfer");
+  return t.hidden === true || isExcludedCategory(t.category) || t.merchant.toLowerCase().includes("transfer");
 }
 
 function shiftMonth(key: string, delta: number): string {

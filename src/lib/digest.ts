@@ -1,4 +1,5 @@
-import { CATEGORY_COLORS, detectRecurring, fmtUSD } from "./analytics";
+import { isExcludedCategory } from "./categories";
+import { categoryColor, detectRecurring, fmtUSD } from "./analytics";
 import { MonthlyReview, monthTitle } from "./review";
 import { AppData, Category, Transaction } from "./types";
 
@@ -15,7 +16,7 @@ export interface WeeklyDigest {
 }
 
 function isTransfer(t: Transaction): boolean {
-  return t.hidden === true || t.category === "Transfer" || t.merchant.toLowerCase().includes("transfer");
+  return t.hidden === true || isExcludedCategory(t.category) || t.merchant.toLowerCase().includes("transfer");
 }
 
 function iso(d: Date): string {
@@ -97,7 +98,7 @@ export function renderMonthlyEmail(r: MonthlyReview): { subject: string; html: s
           (c) => `
       <tr>
         <td style="padding:6px 0;font-size:14px;color:#111;">
-          <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${CATEGORY_COLORS[c.category]};margin-right:7px;"></span>${c.category}
+          <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${categoryColor(c.category)};margin-right:7px;"></span>${c.category}
         </td>
         <td style="padding:6px 0;font-size:14px;text-align:right;white-space:nowrap;color:${c.delta > 0 ? "#c22525" : "#0a7a0a"};">
           ${c.delta > 0 ? "▲" : "▼"} ${fmtUSD(Math.abs(c.delta), 0)}
@@ -219,11 +220,11 @@ export function renderDigestEmail(
       (c) => `
       <tr>
         <td style="padding:6px 12px 6px 0;font-size:14px;color:#333;white-space:nowrap;">
-          <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${CATEGORY_COLORS[c.category]};margin-right:7px;"></span>${c.category}
+          <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${categoryColor(c.category)};margin-right:7px;"></span>${c.category}
         </td>
         <td style="width:100%;padding:6px 0;">
           <div style="background:#eee;border-radius:6px;height:9px;">
-            <div style="width:${Math.max(4, Math.round((c.total / maxCat) * 100))}%;background:${CATEGORY_COLORS[c.category]};height:9px;border-radius:6px;"></div>
+            <div style="width:${Math.max(4, Math.round((c.total / maxCat) * 100))}%;background:${categoryColor(c.category)};height:9px;border-radius:6px;"></div>
           </div>
         </td>
         <td style="padding:6px 0 6px 12px;font-size:14px;color:#111;text-align:right;white-space:nowrap;">${fmtUSD(c.total, 0)}</td>

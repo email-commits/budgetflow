@@ -1,32 +1,33 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { dbConfigured, getDb } from "@/lib/db";
 import { aiEnabled, askClaude, extractJson } from "@/lib/ai";
+import {
+  buildReviewPrompt,
+  collectMerchants,
+  parseReview,
+  REVIEW_BATCH,
+  ReviewScope,
+  reviewChoices,
+} from "@/lib/aiReview";
+import { loadCategories } from "@/lib/categoryStore";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const CATEGORIES = [
-  "Income",
-  "Groceries",
-  "Shopping",
-  "Dining",
-  "Transport",
-  "Subscriptions",
-  "Housing",
-  "Debt Payment",
-  "Utilities",
-  "Health",
-  "Entertainment",
-  "Travel",
-  "Transfer",
-  "Other",
-];
-
 /**
- * POST /api/ai/categorize — find merchants whose transactions are stuck in "Other"
- * (no override, no rule), ask Claude to categorize them, create AI-sourced rules.
+ * POST /api/ai/categorize — let Claude file merchants into categories, saved as AI rules.
+ *
+ *   ?scope=uncategorized (default)  only merchants stuck in Uncategorized / Miscellaneous
+ *   ?scope=all&offset=N             re-review EVERY merchant against the current category
+ *                                   list, one batch per call. Start at offset 0 (which
+ *                                   clears the previous AI rules) and keep calling with
+ *                                   the returned nextOffset until done is true.
+ *
+ * Your own edits and your own rules always win and are never touched: merchants
+ * one of your rules already matches are skipped, and per-transaction edits
+ * override any rule.
  */
-export async function POST() {
+export async function POST(req: NextRequest) {
   if (!dbConfigured()) return NextResponse.json({ error: "Requires a database." }, { status: 400 });
   if (!aiEnabled()) {
     return NextResponse.json(
@@ -34,64 +35,59 @@ export async function POST() {
       { status: 400 }
     );
   }
+  const scope: ReviewScope = req.nextUrl.searchParams.get("scope") === "all" ? "all" : "uncategorized";
+  const offset = Math.max(0, Number(req.nextUrl.searchParams.get("offset")) || 0);
+
   try {
     const db = getDb();
-    const [rules, candidates] = await Promise.all([
+    const categories = await loadCategories(db);
+
+    // a full re-review starts from a clean slate of AI rules
+    if (scope === "all" && offset === 0) {
+      await db.rule.deleteMany({ where: { source: "ai" } });
+    }
+
+    const [rules, txs] = await Promise.all([
       db.rule.findMany(),
       db.transaction.findMany({
-        where: { category: "Other", categoryOverride: null, hidden: false },
-        select: { merchant: true, amount: true },
+        where: { categoryOverride: null, hidden: false },
+        select: { merchant: true, amount: true, category: true },
       }),
     ]);
+    // "all": only YOUR rules take a merchant off the list, so the list (and
+    // therefore the offsets) stays the same while this run adds AI rules.
+    const skip = scope === "all" ? rules.filter((r) => r.source !== "ai") : rules;
+    const merchants = collectMerchants(txs, skip, scope);
+    const total = merchants.length;
+    const batch = merchants.slice(offset, offset + REVIEW_BATCH);
 
-    // distinct merchants not already covered by a rule
-    const covered = (m: string) => rules.some((r) => m.toLowerCase().includes(r.match.toLowerCase()));
-    const byMerchant = new Map<string, { count: number; avg: number }>();
-    for (const t of candidates) {
-      if (covered(t.merchant)) continue;
-      const e = byMerchant.get(t.merchant) ?? { count: 0, avg: 0 };
-      e.avg = (e.avg * e.count + Math.abs(t.amount)) / (e.count + 1);
-      e.count += 1;
-      byMerchant.set(t.merchant, e);
-    }
-    const merchants = [...byMerchant.entries()]
-      .sort((a, b) => b[1].count - a[1].count)
-      .slice(0, 60)
-      .map(([name, v]) => ({ name, count: v.count, typicalAmount: Math.round(v.avg) }));
-
-    if (merchants.length === 0) {
-      return NextResponse.json({ ok: true, created: 0, note: "Nothing uncategorized — all clean!" });
-    }
-
-    const text = await askClaude({
-      system: `You categorize personal-finance merchants. Allowed categories: ${CATEGORIES.join(", ")}.
-Respond with ONLY a JSON array: [{"merchant": "<exact name>", "category": "<category>", "cleanName": "<short friendly name or null>", "confident": true|false}].
-Rules: use "Income" only for payroll/deposits. Payments to a credit card and moves between the user's own accounts are "Transfer". Loan payments (auto, student, personal; not mortgage or rent) are "Debt Payment". Unclear items get "confident": false. cleanName only when the raw name is cryptic (e.g. "AMZN Mktp US*7Y2" -> "Amazon").`,
-      messages: [{ role: "user", content: JSON.stringify(merchants) }],
-      maxTokens: 4000,
-    });
-
-    const parsed = extractJson<{ merchant: string; category: string; cleanName?: string | null; confident: boolean }[]>(
-      text
-    );
-
-    let created = 0;
-    for (const p of parsed) {
-      if (!p.confident) continue;
-      if (!CATEGORIES.includes(p.category) || p.category === "Other") continue;
-      if (!byMerchant.has(p.merchant)) continue; // model must echo an exact merchant we sent
-      await db.rule.create({
-        data: {
-          match: p.merchant,
-          setCategory: p.category,
-          renameTo: p.cleanName || null,
-          source: "ai",
-        },
+    if (batch.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        created: 0,
+        examined: 0,
+        total,
+        nextOffset: offset,
+        done: true,
+        note: total === 0 ? "Nothing to review — all clean!" : undefined,
       });
-      created++;
     }
 
-    return NextResponse.json({ ok: true, created, examined: merchants.length });
+    const choices = reviewChoices(categories);
+    const { system, user } = buildReviewPrompt(choices, batch);
+    const text = await askClaude({ system, messages: [{ role: "user", content: user }], maxTokens: 3000 });
+    const assignments = parseReview(extractJson<unknown>(text), choices, batch);
+
+    const existingAi = new Set(rules.filter((r) => r.source === "ai").map((r) => r.match));
+    const data = assignments
+      .filter((a) => !existingAi.has(a.merchant))
+      .map((a) => ({ match: a.merchant, setCategory: a.category, renameTo: a.cleanName ?? null, source: "ai" }));
+    if (data.length > 0) await db.rule.createMany({ data });
+
+    const nextOffset = offset + batch.length;
+    // "uncategorized" is a single pass over the most frequent unknown merchants
+    const done = scope === "uncategorized" || nextOffset >= total;
+    return NextResponse.json({ ok: true, created: data.length, examined: batch.length, total, nextOffset, done });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "categorize failed" }, { status: 500 });
   }

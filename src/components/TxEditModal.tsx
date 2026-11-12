@@ -1,26 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { CATEGORY_COLORS, fmtUSD } from "@/lib/analytics";
+import { categoryColor, fmtUSD } from "@/lib/analytics";
 import { Category, Transaction } from "@/lib/types";
+import CategorySelect from "./CategorySelect";
 import MerchantLogo from "./MerchantLogo";
-
-const CATEGORIES: Category[] = [
-  "Income",
-  "Groceries",
-  "Shopping",
-  "Dining",
-  "Transport",
-  "Subscriptions",
-  "Housing",
-  "Debt Payment",
-  "Utilities",
-  "Health",
-  "Entertainment",
-  "Travel",
-  "Transfer",
-  "Other",
-];
 
 export default function TxEditModal({
   tx,
@@ -134,21 +118,13 @@ export default function TxEditModal({
 
         <div className="space-y-1.5">
           <label className="text-xs text-ink-muted">Category</label>
-          <div className="flex flex-wrap gap-1.5">
-            {CATEGORIES.map((c) => (
-              <button
-                key={c}
-                onClick={() => setCategory(c)}
-                className={`px-3 py-1.5 rounded-full text-xs border transition-colors flex items-center gap-1.5 ${
-                  category === c
-                    ? "border-white/60 text-ink-primary font-medium bg-surface2"
-                    : "border-white/10 text-ink-secondary hover:border-white/25"
-                }`}
-              >
-                <span className="w-2 h-2 rounded-full" style={{ background: CATEGORY_COLORS[c] }} />
-                {c}
-              </button>
-            ))}
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: categoryColor(category) }} />
+            <CategorySelect
+              value={category}
+              onChange={(c) => setCategory(c)}
+              className="flex-1 bg-surface2 border border-white/10 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-series-1"
+            />
           </div>
         </div>
 
